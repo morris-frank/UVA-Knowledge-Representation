@@ -3,8 +3,10 @@ from itertools import chain
 from collections import namedtuple, OrderedDict
 from typing import List
 
+
 LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
 Node = namedtuple('Node', ['id', 'picked'])
+
 
 def main():
     solver = Solver()
@@ -12,8 +14,10 @@ def main():
     solver.print()
     # solver.solve()
 
+
 class BacktrackException(Exception):
     pass
+
 
 class Bunch:
     def __init__(self, **kwds):
@@ -52,7 +56,7 @@ class Clause(Bunch):
     def value(self):
         if _value != None:
             return _value
-        values = [literal.literal.value for literal in self.literals]
+        values = [not(litwrap.literal.value ^ litwrap.sign) for litwrap in self.literals]
         if any(values):
             return True
         if not any(values):
@@ -81,17 +85,6 @@ class Solver(object):
             if id <= self.pivot or literal.value != None:
                 continue
             self.pivot = id
-
-    def recent_split(self):
-        for node in self.log:
-            pass
-
-    def pick_random(self):
-        picked_lit = None
-        for lit, val in self.literal_values.items():
-            if not val:
-                picked_lit = lit
-        self.add_node(picked_lit, True, True)
 
     def reverse_changes_until(self, id):
         it = reversed(self.log)
@@ -124,11 +117,24 @@ class Solver(object):
             print('EMPTY')
             exit(0)
 
+    def check_done(self):
+        if all([clause.value for clause in self.clauses]):
+            print('Le finish')
+            exit(0)
+
+    def split(self):
+        self.next_pivot()
+        self.literals[self.pivot].update(False)
+        self.log.append(Node(id=self.pivot, picked=True))
+        self.simplify()
+
     def simplify(self):
         try:
             simplified = False
             while not simplified:
                 simplified = self._simplify()
+            self.check_done()
+            self.split()
         except BacktrackException:
             self.backtrack()
 
@@ -149,6 +155,10 @@ class Solver(object):
                     self.log.append(Node(id=litwrap.literal.id, picked=False))
                     return True
         return False
+
+    def solve(self):
+        self.fix_tautologies()
+        self.simplify()
 
     def add_sat_file(self, fname):
         _literals = {}
