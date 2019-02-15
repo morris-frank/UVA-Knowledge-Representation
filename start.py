@@ -1,40 +1,57 @@
 #!/bin/python
-from collections import namedtuple
+from itertools import chain
+from collections import namedtuple, OrderedDict
 from typing import List
 
-
 LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
+Node = namedtuple('Node', ['id', 'picked'])
 
 def main():
     solver = Solver()
     solver.add_sat_file('test.sat')
     solver.print()
-    solver.simplify()
-    solver.print()
-    solver.simplify()
-    solver.print()
+    # solver.solve()
+
+class BacktrackException(Exception):
+    pass
 
 class Bunch:
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
+
 
 class Literal(Bunch):
     def __init__(self, id: int, value=None):
         super().__init__(id=id, value=value)
         self.clauses = []
 
-class Node(Bunch):
-    def __init__(self, literal: int, value: bool, picked: bool):
-        super().__init__(literal=literal, value=value, picked=picked)
+    def update(self, value):
+        self.value = value
 
-class Clause(Bunch);
+        # check for contridiction
+        for clause in self.clauses:
+            clause._number_not_falses = None
+            if clause.value == False:
+                raise BacktrackException
+
+class Clause(Bunch):
     def __init__(self):
-        super().__init__(literals=[], _number_not_falses=None)
+        super().__init__(literals=[], _number_not_falses=None, _value=None)
 
     def add(self, literal: Literal, sign: bool):
         self.literals.append(LitWrap(literal=literal, sign=sign))
 
+    def is_tautology(self):
+        counts = {}
+        for litwrap in self.literals:
+            if counts.setdefault(litwrap.literal.id, sign) != sign:
+                return True
+        return False
+
+    @property
     def value(self):
+        if _value != None:
+            return _value
         values = [literal.literal.value for literal in self.literals]
         if any(values):
             return True
@@ -42,18 +59,32 @@ class Clause(Bunch);
             return False
         return None
 
+    @property
     def number_not_falses(self):
         if self._number_not_falses == None:
                 self._number_not_falses = sum([literal.literal.value != False for literal in self.literals])
         return self._number_not_falses
 
+
 class Solver(object):
     def __init__(self):
         self.clauses = []
         self.literals = {}
+        self.log = []
+        self.pivot = None
 
     def print(self):
         print('NClauses: {}, NLiterals: {}'.format(len(self.clauses), len(self.literals)))
+
+    def next_pivot(self):
+        for id, literal in self.literals.items():
+            if id <= self.pivot or literal.value != None:
+                continue
+            self.pivot = id
+
+    def recent_split(self):
+        for node in self.log:
+            pass
 
     def pick_random(self):
         picked_lit = None
@@ -62,23 +93,65 @@ class Solver(object):
                 picked_lit = lit
         self.add_node(picked_lit, True, True)
 
-    def solve(self):
-        simplified = False
-        while not simplified:
-            simplified = self.simplify()
+    def reverse_changes_until(self, id):
+        it = reversed(self.log)
+        while:
+            self.literals[node.id].update(None)
+            if node.literal == id:
+                self.log.pop()
+                break
+            next(it)
+            self.log.pop()
+
+    def find_last_pivot(self):
+        for node in reversed(self.log):
+            if not node.picked:
+                continue
+            return node.id
+
+    def backtrack(self):
+        pivot = self.literals[self.pivot]
+        if pivot.value == False:
+            self.reverse_changes_until(pivot.id)
+            pivot.update(True)
+            self.log.append(Node(id=pivot.id, picked=True))
+            self.simplify()
+        elif pivot.id > 1 # Pivot was true:
+            self.reverse_changes_until(pivot.id)
+            self.pivot = self.find_last_pivot()
+            self.backtrack()
+        else:
+            print('EMPTY')
+            exit(0)
 
     def simplify(self):
-        # Step checking for unit clauses
-        unicids = [cid for (cid, n) in self.n_not_falses.items() if n == 1]
-        for cid in unicids:
-            for (lit, sgn) in self.clauses[cid]:
-                if not self.literal_values[lit]:
-                    self.add_node(lit, sgn, False)
+        try:
+            simplified = False
+            while not simplified:
+                simplified = self._simplify()
+        except BacktrackException:
+            self.backtrack()
+
+    def fix_tautologies(self):
+        for clause in self.clauses:
+            if clause.is_tautology():
+                clause._value = True
+
+    def _simplify(self):
+        for clause in self.clauses:
+            if clause.number_not_falses != 1:
+                continue
+
+            # We got a uni clause
+            for litwrap in clause.literals:
+                if litwrap.literal.value == None:
+                    litwrap.literal.update(litwrap.sign)
+                    self.log.append(Node(id=litwrap.literal.id, picked=False))
                     return True
         return False
 
-
     def add_sat_file(self, fname):
+        _literals = {}
         with open(fname) as fp:
             for line in fp:
                 if line.startswith('p') or line.startswith('c'):
@@ -92,9 +165,10 @@ class Solver(object):
                         self.clauses.append(clause)
                         break
 
-                    self.literals.setdefault(literal, Literal(literal))
-                    self.literals[literal].clauses.append(clauseid)
-                    clause.add(self.literals[literal])
+                    _literals.setdefault(literal, Literal(literal))
+                    _literals[literal].clauses.append(clause)
+                    clause.add(literal=_literals[literal], sign=sign)
+        self.literals = OrderedDict(sorted(chain(self.literals.items(), _literals.items()), key=lambda x: x[0]))
 
 if __name__ == "__main__":
     main()
