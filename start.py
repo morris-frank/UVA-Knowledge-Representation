@@ -1,4 +1,5 @@
 #!/bin/python
+
 from itertools import chain
 from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
@@ -7,19 +8,6 @@ from argparse import ArgumentParser
 LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
 Node = namedtuple('Node', ['id', 'picked'])
 
-
-def main():
-    args = parse_args()
-    solver = Solver()
-    solver.add_sat_file(args.filename)
-    solver.solve()
-
-def parse_args():
-    parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
-    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1,2,3], default=1, required=True)
-    parser.add_argument('filename', help='The text file to parse from.')
-    args = parser.parse_args()
-    return args
 
 class BacktrackException(Exception):
     pass
@@ -43,6 +31,7 @@ class Literal(Bunch):
             clause._number_not_falses = None
             if clause.value == False:
                 raise BacktrackException
+
 
 class Clause(Bunch):
     def __init__(self):
@@ -101,20 +90,22 @@ class Solver(object):
         for id, literal in self.literals.items():
             if id <= self.pivot or literal.value != None:
                 continue
-            self.pivot = int(id)
+            return int(id)
 
     def reverse_changes_until(self, id: int):
-        print('reverse_changes: {}'.format(self.pivot))
-        print(self.log)
+        # print('Pivot: {}, #Nones: {}, |Log|: {}, Σ {}'.format(self.pivot, self.number_of_none_literals(), len(self.log), self.number_of_none_literals() + len(self.log)))
+        # print(' '.join([str(node.id) for node in self.log]))
         it = reversed(self.log)
-        node = next(it)
-        while True:
-            self.literals[node.id].update(None)
-            if node.id == id:
-                self.log.pop()
-                break
+        try:
             node = next(it)
-            self.log.pop()
+            while True:
+                self.literals[node.id].update(None)
+                if int(node.id) == int(id):
+                    return self.log.pop()
+                node = next(it)
+                self.log.pop()
+        except StopIteration:
+            print(' '.join([str(node.id) for node in self.log]))
 
     def find_last_pivot(self):
         for node in reversed(self.log):
@@ -125,11 +116,13 @@ class Solver(object):
     def backtrack(self):
         pivot = self.literals[self.pivot]
         if pivot.value == False:
+            # print('Backtrack pivot {} was false'.format(self.pivot))
             self.reverse_changes_until(pivot.id)
-            pivot.update(True)
             self.log.append(Node(id=pivot.id, picked=True))
+            pivot.update(True)
             self.simplify()
         elif pivot.id > 1: # Pivot was true:
+            # print('Backtrack pivot {} was true'.format(self.pivot))
             self.reverse_changes_until(pivot.id)
             self.pivot = self.find_last_pivot()
             self.backtrack()
@@ -142,8 +135,15 @@ class Solver(object):
             print('Le finish')
             exit(0)
 
+    def number_of_none_literals(self):
+        n = 0
+        for literal in self.literals.values():
+            n += literal.value == None
+        return n
+
     def split(self):
-        self.next_pivot()
+        # print('#Nones: {}, |Log|: {}, pivot: {}, true clauses: {}'.format(self.number_of_none_literals(), len(self.log), self.pivot, sum([1 for c in self.clauses if c.value == True])))
+        self.pivot = self.next_pivot()
         self.literals[self.pivot].update(False)
         self.log.append(Node(id=self.pivot, picked=True))
         self.simplify()
@@ -198,6 +198,20 @@ class Solver(object):
                     _literals[literal].clauses.append(clause)
                     clause.add(literal=_literals[literal], sign=sign)
         self.literals = OrderedDict(sorted(chain(self.literals.items(), _literals.items()), key=lambda x: x[0]))
+
+
+def parse_args():
+    parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
+    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1,2,3], default=1, required=True)
+    parser.add_argument('filename', help='The text file to parse from.')
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = parse_args()
+    solver = Solver()
+    solver.add_sat_file(args.filename)
+    solver.solve()
 
 if __name__ == "__main__":
     main()
