@@ -1,7 +1,9 @@
 #!/bin/python
 from collections import namedtuple
+from typing import List
 
-Node = namedtuple('Node' , ['literal', 'value', 'picked'])
+
+LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
 
 def main():
     solver = Solver()
@@ -12,23 +14,46 @@ def main():
     solver.simplify()
     solver.print()
 
+class Bunch:
+    def __init__(self, **kwds):
+        self.__dict__.update(kwds)
+
+class Literal(Bunch):
+    def __init__(self, id: int, value=None):
+        super().__init__(id=id, value=value)
+        self.clauses = []
+
+class Node(Bunch):
+    def __init__(self, literal: int, value: bool, picked: bool):
+        super().__init__(literal=literal, value=value, picked=picked)
+
+class Clause(Bunch);
+    def __init__(self):
+        super().__init__(literals=[], _number_not_falses=None)
+
+    def add(self, literal: Literal, sign: bool):
+        self.literals.append(LitWrap(literal=literal, sign=sign))
+
+    def value(self):
+        values = [literal.literal.value for literal in self.literals]
+        if any(values):
+            return True
+        if not any(values):
+            return False
+        return None
+
+    def number_not_falses(self):
+        if self._number_not_falses == None:
+                self._number_not_falses = sum([literal.literal.value != False for literal in self.literals])
+        return self._number_not_falses
+
 class Solver(object):
     def __init__(self):
         self.clauses = []
-        self.n_not_falses = {}
-        self.literal_values = {}
-        self.literal_clauses = {}
-        self.clause_done = {}
-        self.nodes = []
+        self.literals = {}
 
     def print(self):
-        print('NClauses: {}, NLiterals: {}, NNodes: {}'.format(len(self.clauses), len(self.literal_values), len(self.nodes)))
-        for node in self.nodes:
-            print(node)
-
-    def add_node(self, literal: int, value: bool, picked: bool):
-        self.nodes.append(Node(literal, value, picked))
-        self.literal_values[literal] = value
+        print('NClauses: {}, NLiterals: {}'.format(len(self.clauses), len(self.literals)))
 
     def pick_random(self):
         picked_lit = None
@@ -58,18 +83,18 @@ class Solver(object):
             for line in fp:
                 if line.startswith('p') or line.startswith('c'):
                     continue
-                clause = []
-                cid = len(self.clauses)
+                clause = Clause()
+                clauseid = len(self.clauses)
                 for c in line.split():
-                    lit = float(c)
-                    if lit == 0:
-                        self.n_not_falses[cid] = len(clause)
+                    literal = float(c)
+                    literal, sign = abs(literal), literal > 0
+                    if literal == 0:
                         self.clauses.append(clause)
                         break
-                    self.literal_clauses.setdefault(lit, [])
-                    self.literal_values[lit] = None
-                    self.literal_clauses[lit].append(cid)
-                    clause.append((abs(lit), lit >0))
+
+                    self.literals.setdefault(literal, Literal(literal))
+                    self.literals[literal].clauses.append(clauseid)
+                    clause.add(self.literals[literal])
 
 if __name__ == "__main__":
     main()
