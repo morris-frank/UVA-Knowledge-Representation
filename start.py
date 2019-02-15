@@ -78,7 +78,12 @@ class Clause(Bunch):
     @property
     def number_not_falses(self):
         if self._number_not_falses == None:
-                self._number_not_falses = sum([litwrap.literal.value != False for litwrap in self.litwraps])
+            self._number_not_falses = 0
+            for litwrap in self.litwraps:
+                if litwrap.literal.value == None:
+                    self._number_not_falses += 1
+                else:
+                    self._number_not_falses += not(litwrap.literal.value ^ litwrap.sign)
         return self._number_not_falses
 
 
@@ -96,9 +101,11 @@ class Solver(object):
         for id, literal in self.literals.items():
             if id <= self.pivot or literal.value != None:
                 continue
-            self.pivot = id
+            self.pivot = int(id)
 
     def reverse_changes_until(self, id: int):
+        print('reverse_changes: {}'.format(self.pivot))
+        print(self.log)
         it = reversed(self.log)
         node = next(it)
         while True:
@@ -113,7 +120,7 @@ class Solver(object):
         for node in reversed(self.log):
             if not node.picked:
                 continue
-            return node.id
+            return int(node.id)
 
     def backtrack(self):
         pivot = self.literals[self.pivot]
@@ -160,14 +167,13 @@ class Solver(object):
         for clause in self.clauses:
             if clause.number_not_falses != 1:
                 continue
-
             # We got a uni clause
             for litwrap in clause.litwraps:
                 if litwrap.literal.value == None:
                     litwrap.literal.update(litwrap.sign)
                     self.log.append(Node(id=litwrap.literal.id, picked=False))
-                    return True
-        return False
+                    return False
+        return True
 
     def solve(self):
         self.fix_tautologies()
