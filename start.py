@@ -1,7 +1,7 @@
 #!/bin/python
 from itertools import chain
 from collections import namedtuple, OrderedDict
-from typing import List
+import argparse
 
 
 LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
@@ -40,14 +40,14 @@ class Literal(Bunch):
 
 class Clause(Bunch):
     def __init__(self):
-        super().__init__(literals=[], _number_not_falses=None, _value=None)
+        super().__init__(litwraps=[], _number_not_falses=None, _value=None)
 
     def add(self, literal: Literal, sign: bool):
-        self.literals.append(LitWrap(literal=literal, sign=sign))
+        self.litwraps.append(LitWrap(literal=literal, sign=sign))
 
     def is_tautology(self):
         counts = {}
-        for litwrap in self.literals:
+        for litwrap in self.litwraps:
             if counts.setdefault(litwrap.literal.id, sign) != sign:
                 return True
         return False
@@ -56,7 +56,7 @@ class Clause(Bunch):
     def value(self):
         if _value != None:
             return _value
-        values = [not(litwrap.literal.value ^ litwrap.sign) for litwrap in self.literals]
+        values = [not(litwrap.literal.value ^ litwrap.sign) for litwrap in self.litwraps]
         if any(values):
             return True
         if not any(values):
@@ -66,7 +66,7 @@ class Clause(Bunch):
     @property
     def number_not_falses(self):
         if self._number_not_falses == None:
-                self._number_not_falses = sum([literal.literal.value != False for literal in self.literals])
+                self._number_not_falses = sum([litwrap.literal.value != False for litwrap in self.litwraps])
         return self._number_not_falses
 
 
@@ -149,7 +149,7 @@ class Solver(object):
                 continue
 
             # We got a uni clause
-            for litwrap in clause.literals:
+            for litwrap in clause.litwraps:
                 if litwrap.literal.value == None:
                     litwrap.literal.update(litwrap.sign)
                     self.log.append(Node(id=litwrap.literal.id, picked=False))
