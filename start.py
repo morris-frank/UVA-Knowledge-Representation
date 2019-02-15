@@ -1,7 +1,7 @@
 #!/bin/python
 from itertools import chain
 from collections import namedtuple, OrderedDict
-import argparse
+from argparse import ArgumentParser
 
 
 LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
@@ -9,11 +9,17 @@ Node = namedtuple('Node', ['id', 'picked'])
 
 
 def main():
+    args = parse_args()
     solver = Solver()
-    solver.add_sat_file('test.sat')
-    solver.print()
-    # solver.solve()
+    solver.add_sat_file(args.filename)
+    solver.solve()
 
+def parse_args():
+    parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
+    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1,2,3], default=1, required=True)
+    parser.add_argument('filename', help='The text file to parse from.')
+    args = parser.parse_args()
+    return args
 
 class BacktrackException(Exception):
     pass
@@ -48,20 +54,26 @@ class Clause(Bunch):
     def is_tautology(self):
         counts = {}
         for litwrap in self.litwraps:
-            if counts.setdefault(litwrap.literal.id, sign) != sign:
+            if counts.setdefault(litwrap.literal.id, litwrap.sign) != litwrap.sign:
                 return True
         return False
 
     @property
     def value(self):
-        if _value != None:
-            return _value
-        values = [not(litwrap.literal.value ^ litwrap.sign) for litwrap in self.litwraps]
-        if any(values):
-            return True
-        if not any(values):
-            return False
-        return None
+        if self._value != None:
+            return self._value
+        has_none = False
+        for litwrap in self.litwraps:
+            if litwrap.literal.value == None:
+                has_none = True
+                continue
+            value = not(litwrap.literal.value ^ litwrap.sign)
+            if value:
+                return True
+        if has_none:
+            return None
+        else:
+            return False;
 
     @property
     def number_not_falses(self):
@@ -75,7 +87,7 @@ class Solver(object):
         self.clauses = []
         self.literals = {}
         self.log = []
-        self.pivot = None
+        self.pivot = -1
 
     def print(self):
         print('NClauses: {}, NLiterals: {}'.format(len(self.clauses), len(self.literals)))
@@ -86,14 +98,15 @@ class Solver(object):
                 continue
             self.pivot = id
 
-    def reverse_changes_until(self, id):
+    def reverse_changes_until(self, id: int):
         it = reversed(self.log)
-        while:
+        node = next(it)
+        while True:
             self.literals[node.id].update(None)
-            if node.literal == id:
+            if node.id == id:
                 self.log.pop()
                 break
-            next(it)
+            node = next(it)
             self.log.pop()
 
     def find_last_pivot(self):
@@ -109,7 +122,7 @@ class Solver(object):
             pivot.update(True)
             self.log.append(Node(id=pivot.id, picked=True))
             self.simplify()
-        elif pivot.id > 1 # Pivot was true:
+        elif pivot.id > 1: # Pivot was true:
             self.reverse_changes_until(pivot.id)
             self.pivot = self.find_last_pivot()
             self.backtrack()
