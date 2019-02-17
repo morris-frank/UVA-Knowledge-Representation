@@ -1,5 +1,6 @@
 #!/bin/python
 
+import sys
 from itertools import chain
 from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
@@ -9,7 +10,13 @@ LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
 Node = namedtuple('Node', ['id', 'picked'])
 
 
-class BacktrackException(Exception):
+class SplitException(BaseException):
+    pass
+
+class SimplifyException(BaseException):
+    pass
+
+class BacktrackException(BaseException):
     pass
 
 
@@ -82,15 +89,96 @@ class Solver(object):
         self.literals = {}
         self.log = []
         self.pivot = -1
+        self.next_call = None
 
     def print(self):
         print('NClauses: {}, NLiterals: {}'.format(len(self.clauses), len(self.literals)))
+
+    def number_of_none_literals(self):
+        n = 0
+        for literal in self.literals.values():
+            n += literal.value == None
+        return n
+
+    def check_done(self):
+        if all([clause.value for clause in self.clauses]):
+            print('Le finish')
+            exit(0)
+
+    def solve(self):
+        self.fix_tautologies()
+        self.next_call = self.simplify
+        while self.next_call:
+            self.next_call()
+
+
+    def fix_tautologies(self):
+        for clause in self.clauses:
+            if clause.is_tautology():
+                clause._value = True
+
+    def simplify(self):
+        try:
+            simplified = False
+            while not simplified:
+                simplified = self._simplify()
+            self.check_done()
+            self.next_call = self.split
+        except BacktrackException:
+            self.next_call = self.backtrack
+            return
+
+    def _simplify(self):
+        for clause in self.clauses:
+            if clause.number_not_falses != 1:
+                continue
+            # We got a uni clause
+            for litwrap in clause.litwraps:
+                if litwrap.literal.value == None:
+                    litwrap.literal.update(litwrap.sign)
+                    self.log.append(Node(id=litwrap.literal.id, picked=False))
+                    return False
+        return True
+
+    def split(self):
+        _pivot = self.next_pivot()
+        print('Split: {} #Nones: {}, |Log|: {}, pivot: {}, true clauses: {}'.format(_pivot, self.number_of_none_literals(), len(self.log), self.pivot, sum([1 for c in self.clauses if c.value == True])))
+        if _pivot == None:
+            self.next_call = self.backtrack
+            return
+        self.pivot = _pivot
+        self.literals[self.pivot].update(False)
+        self.log.append(Node(id=self.pivot, picked=True))
+        self.next_call = self.simplify
 
     def next_pivot(self):
         for id, literal in self.literals.items():
             if id <= self.pivot or literal.value != None:
                 continue
             return int(id)
+
+    def backtrack(self):
+        pivot_literal = self.literals[self.pivot]
+        if pivot_literal.value == False:
+            print('Backtrack pivot {} was false'.format(self.pivot))
+            self.reverse_changes_until(pivot_literal.id)
+            self.log.append(Node(id=pivot_literal.id, picked=True))
+            pivot_literal.update(True)
+            self.next_call = self.simplify
+        elif pivot_literal.id > 1: # Pivot was true:
+            print('Backtrack pivot {} was true'.format(self.pivot))
+            self.reverse_changes_until(pivot_literal.id)
+            self.pivot = self.find_last_pivot()
+            self.next_call = self.backtrack
+        else:
+            print('EMPTY')
+            exit(0)
+
+    def find_last_pivot(self):
+        for node in reversed(self.log):
+            if not node.picked:
+                continue
+            return int(node.id)
 
     def reverse_changes_until(self, id: int):
         # print('Pivot: {}, #Nones: {}, |Log|: {}, Σ {}'.format(self.pivot, self.number_of_none_literals(), len(self.log), self.number_of_none_literals() + len(self.log)))
@@ -106,78 +194,6 @@ class Solver(object):
                 self.log.pop()
         except StopIteration:
             print(' '.join([str(node.id) for node in self.log]))
-
-    def find_last_pivot(self):
-        for node in reversed(self.log):
-            if not node.picked:
-                continue
-            return int(node.id)
-
-    def backtrack(self):
-        pivot = self.literals[self.pivot]
-        if pivot.value == False:
-            # print('Backtrack pivot {} was false'.format(self.pivot))
-            self.reverse_changes_until(pivot.id)
-            self.log.append(Node(id=pivot.id, picked=True))
-            pivot.update(True)
-            self.simplify()
-        elif pivot.id > 1: # Pivot was true:
-            # print('Backtrack pivot {} was true'.format(self.pivot))
-            self.reverse_changes_until(pivot.id)
-            self.pivot = self.find_last_pivot()
-            self.backtrack()
-        else:
-            print('EMPTY')
-            exit(0)
-
-    def check_done(self):
-        if all([clause.value for clause in self.clauses]):
-            print('Le finish')
-            exit(0)
-
-    def number_of_none_literals(self):
-        n = 0
-        for literal in self.literals.values():
-            n += literal.value == None
-        return n
-
-    def split(self):
-        # print('#Nones: {}, |Log|: {}, pivot: {}, true clauses: {}'.format(self.number_of_none_literals(), len(self.log), self.pivot, sum([1 for c in self.clauses if c.value == True])))
-        self.pivot = self.next_pivot()
-        self.literals[self.pivot].update(False)
-        self.log.append(Node(id=self.pivot, picked=True))
-        self.simplify()
-
-    def simplify(self):
-        try:
-            simplified = False
-            while not simplified:
-                simplified = self._simplify()
-            self.check_done()
-            self.split()
-        except BacktrackException:
-            self.backtrack()
-
-    def fix_tautologies(self):
-        for clause in self.clauses:
-            if clause.is_tautology():
-                clause._value = True
-
-    def _simplify(self):
-        for clause in self.clauses:
-            if clause.number_not_falses != 1:
-                continue
-            # We got a uni clause
-            for litwrap in clause.litwraps:
-                if litwrap.literal.value == None:
-                    litwrap.literal.update(litwrap.sign)
-                    self.log.append(Node(id=litwrap.literal.id, picked=False))
-                    return False
-        return True
-
-    def solve(self):
-        self.fix_tautologies()
-        self.simplify()
 
     def add_sat_file(self, fname):
         _literals = {}
