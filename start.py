@@ -88,7 +88,6 @@ class Solver(object):
         self.clauses = []
         self.literals = {}
         self.log = []
-        self.pivot = -1
         self.next_call = None
 
     def print(self):
@@ -109,7 +108,10 @@ class Solver(object):
         self.fix_tautologies()
         self.next_call = self.simplify
         while self.next_call:
-            self.next_call()
+            _next_call = self.next_call
+            self.next_call = None
+            self.check_done()
+            _next_call()
 
 
     def fix_tautologies(self):
@@ -141,61 +143,58 @@ class Solver(object):
         return True
 
     def split(self):
-        _pivot = self.next_pivot()
-        print('Split: {} #Nones: {}, |Log|: {}, pivot: {}, true clauses: {}'.format(_pivot, self.number_of_none_literals(), len(self.log), self.pivot, sum([1 for c in self.clauses if c.value == True])))
-        if _pivot == None:
+        next_split = self.next_split()
+        if next_split == None:
             self.next_call = self.backtrack
             return
-        self.pivot = _pivot
-        self.literals[self.pivot].update(False)
-        self.log.append(Node(id=self.pivot, picked=True))
+        print('Last: {}, Next: {}, #Nones: {}'.format(self.get_split(), next_split, self.number_of_none_literals()))
+        self.literals[next_split].update(False)
+        self.log.append(Node(id=next_split, picked=True))
         self.next_call = self.simplify
 
-    def next_pivot(self):
+    def next_split(self):
+        last_split = self.get_split()
         for id, literal in self.literals.items():
-            if id <= self.pivot or literal.value != None:
+            if (last_split != None and id <= last_split) or literal.value != None:
                 continue
             return int(id)
 
     def backtrack(self):
-        pivot_literal = self.literals[self.pivot]
-        if pivot_literal.value == False:
-            print('Backtrack pivot {} was false'.format(self.pivot))
-            self.reverse_changes_until(pivot_literal.id)
-            self.log.append(Node(id=pivot_literal.id, picked=True))
-            pivot_literal.update(True)
+        last_split_literal = self.literals[self.get_split()]
+        if last_split_literal.value == False:
+            print('Backtrack split {} was false'.format(last_split_literal.id))
+            self.reverse_changes_until(last_split_literal.id)
+            last_split_literal.update(True)
             self.next_call = self.simplify
-        elif pivot_literal.id > 1: # Pivot was true:
-            print('Backtrack pivot {} was true'.format(self.pivot))
-            self.reverse_changes_until(pivot_literal.id)
-            self.pivot = self.find_last_pivot()
+        elif last_split_literal.id > 1: # Pivot was true:
+            print('Backtrack split {} was true'.format(last_split_literal.id))
+            self.reverse_changes_until(last_split_literal.id)
+            self.log.pop()
             self.next_call = self.backtrack
         else:
-            print('EMPTY')
+            print('Problem unsolveable')
             exit(0)
 
-    def find_last_pivot(self):
+    def get_split(self):
         for node in reversed(self.log):
             if not node.picked:
                 continue
             return int(node.id)
 
     def reverse_changes_until(self, id: int):
-        # print('Pivot: {}, #Nones: {}, |Log|: {}, Σ {}'.format(self.pivot, self.number_of_none_literals(), len(self.log), self.number_of_none_literals() + len(self.log)))
-        # print(' '.join([str(node.id) for node in self.log]))
         it = reversed(self.log)
         try:
             node = next(it)
             while True:
                 self.literals[node.id].update(None)
                 if int(node.id) == int(id):
-                    return self.log.pop()
+                    break
                 node = next(it)
                 self.log.pop()
         except StopIteration:
             print(' '.join([str(node.id) for node in self.log]))
 
-    def add_sat_file(self, fname):
+    def add_dimacs_file(self, fname):
         _literals = {}
         with open(fname) as fp:
             for line in fp:
@@ -226,7 +225,7 @@ def parse_args():
 def main():
     args = parse_args()
     solver = Solver()
-    solver.add_sat_file(args.filename)
+    solver.add_dimacs_file(args.filename)
     solver.solve()
 
 if __name__ == "__main__":

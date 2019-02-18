@@ -1,6 +1,6 @@
 #!/bin/python
 import sys
-from start import Solver
+from start2 import Solver
 
 def parse_n_run_sudoku(line):
     open('test.sat', 'w').close()
@@ -13,10 +13,10 @@ def parse_n_run_sudoku(line):
                 row = int(i / 9) + 1
                 fp.write('{}{}{} 0\n'.format(column, row, c))
     solver = Solver()
-    solver.add_sat_file('./test.sat')
-    solver.add_sat_file('./sudoku-rules.txt')
+    solver.add_dimacs_file('./test.sat')
+    solver.add_dimacs_file('./sudoku-rules.txt')
+    print('# Literals: {}, # Clauses: {}'.format(len(solver.literals), len(solver.clauses)))
     solver.solve()
-    input('Continue?')
 
 def main():
     sys.setrecursionlimit(10000)
@@ -24,6 +24,7 @@ def main():
 
     with open(fname) as fp:
         for line in fp:
+            input('{}?'.format(line))
             parse_n_run_sudoku(line)
 
 
