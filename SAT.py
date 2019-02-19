@@ -117,16 +117,16 @@ def _solve(clauses: List[Clause], trues=[]) -> List[int]:
         log_print(clauses, trues)
 
     if len(clauses) == 0:
-        log_print(clauses, trues)
-        if VERBOSE:
-            print_solution(trues)
-        return True
+        return trues
+
+    if any(len(clause) == 0 for clause in clauses):
+        return False
 
     s, clauses, trues = unit_propagation(clauses, trues)
     if s == NOT_DONE:
         return _solve(clauses, trues)
     else:
-        return _solve(*split(clauses, trues, False)) or _solve(*split(clauses, trues, False))
+        return _solve(*split(clauses, trues, True)) or _solve(*split(clauses, trues, False))
 
 def print_solution(trues: List[int]):
     scr = [list(repeat(' ', 9)) for _ in range(1,10)]
