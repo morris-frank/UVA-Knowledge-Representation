@@ -1,6 +1,6 @@
 #!/bin/python
 import sys
-from start2 import Solver
+import start4
 
 def parse_n_run_sudoku(line):
     open('test.sat', 'w').close()
@@ -12,11 +12,8 @@ def parse_n_run_sudoku(line):
                 column = int(i % 9 + 1)
                 row = int(i / 9) + 1
                 fp.write('{}{}{} 0\n'.format(column, row, c))
-    solver = Solver()
-    solver.add_dimacs_file('./test.sat')
-    solver.add_dimacs_file('./sudoku-rules.txt')
-    print('# Literals: {}, # Clauses: {}'.format(len(solver.literals), len(solver.clauses)))
-    solver.solve()
+    clauses = start4.parse_dimacs_files(['./test.sat', './sudoku-rules.txt'])
+    start4.solve(clauses)
 
 def main():
     sys.setrecursionlimit(10000)

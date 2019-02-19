@@ -56,7 +56,8 @@ class Solver(object):
                 return False
         return True
 
-    def _solve(self, lid: int):
+    def _solve(self, lid_iter):
+        lid = next(lid_iter)
         print('Calling _solve with {}'.format(lid))
         if lid == len(self.literals):
             print('AM finished. Was solveable, duh')
@@ -65,14 +66,14 @@ class Solver(object):
             self.literals[lid] = sign
             literal = encode_literal(lid, sign)
             if self.no_contradictions(literal):
-                for a in self._solve(lid + 1):
+                for a in self._solve(lid_iter):
                     yield a
                 # yield self._solve(lid + 1)
         self.literals[lid] = None
 
     def solve(self):
         self.add_clause_links()
-        print(list(self._solve(0)))
+        print(list(self._solve(iter(self.literals.keys()))))
 
 
 def parse_args():
@@ -86,6 +87,7 @@ def main():
     args = parse_args()
     solver = Solver()
     solver.add_dimacs_file(args.filename)
+    print(sorted(solver.literals.keys()))
     solver.solve()
 
 if __name__ == "__main__":

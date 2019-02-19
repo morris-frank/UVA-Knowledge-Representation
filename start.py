@@ -6,64 +6,52 @@ from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
 
 
-LitWrap = namedtuple('LitWrap', ['literal', 'sign'])
+SignedLiteral = namedtuple('SignedLiteral', ['lid', 'sign'])
+Literal = namedtuple('Literal', ['value', 'clauses'])
 Node = namedtuple('Node', ['id', 'picked'])
-
-
-class SplitException(BaseException):
-    pass
-
-class SimplifyException(BaseException):
-    pass
 
 class BacktrackException(BaseException):
     pass
 
 
-class Bunch:
-    def __init__(self, **kwds):
-        self.__dict__.update(kwds)
-
-
-class Literal(Bunch):
+class Literal(object):
     def __init__(self, id: int, value=None):
-        super().__init__(id=id, value=value)
+        self.id = id
+        self.value = value
         self.clauses = []
 
     def update(self, value):
         self.value = value
-
         # check for contridiction
         for clause in self.clauses:
-            clause._number_not_falses = None
-            if clause.value == False:
+            clause._number_not_falses() = None
+            if clause.value() == False:
                 raise BacktrackException
 
 
 class Clause(Bunch):
     def __init__(self):
-        super().__init__(litwraps=[], _number_not_falses=None, _value=None)
+        super().__init__(signed_literals=[], _number_not_falses=None, _value=None)
 
     def add(self, literal: Literal, sign: bool):
-        self.litwraps.append(LitWrap(literal=literal, sign=sign))
+        self.signed_literals.append(SignedLiteral(literal=literal, sign=sign))
 
     def is_tautology(self):
         counts = {}
-        for litwrap in self.litwraps:
-            if counts.setdefault(litwrap.literal.id, litwrap.sign) != litwrap.sign:
+        for signed_literal in self.signed_literals:
+            if counts.setdefault(signed_literal.literal.id, signed_literal.sign) != signed_literal.sign:
                 return True
         return False
 
-    @property
     def value(self):
         if self._value != None:
             return self._value
         has_none = False
-        for litwrap in self.litwraps:
-            if litwrap.literal.value == None:
+        for signed_literal in self.signed_literals:
+            if signed_literal.literal.value == None:
                 has_none = True
                 continue
-            value = not(litwrap.literal.value ^ litwrap.sign)
+            value = not(signed_literal.literal.value ^ signed_literal.sign)
             if value:
                 return True
         if has_none:
@@ -71,23 +59,23 @@ class Clause(Bunch):
         else:
             return False;
 
-    @property
     def number_not_falses(self):
         if self._number_not_falses == None:
             self._number_not_falses = 0
-            for litwrap in self.litwraps:
-                if litwrap.literal.value == None:
+            for signed_literal in self.signed_literals:
+                if signed_literal.literal.value == None:
                     self._number_not_falses += 1
                 else:
-                    self._number_not_falses += not(litwrap.literal.value ^ litwrap.sign)
+                    self._number_not_falses += not(signed_literal.literal.value ^ signed_literal.sign)
         return self._number_not_falses
 
 
 class Solver(object):
     def __init__(self):
-        self.clauses = []
-        self.literals = {}
-        self.log = []
+        self.clauses = [] #
+        self.literals = {} # ID -> Literals
+        self.log = [] # List of lists
+
         self.next_call = None
 
     def print(self):
@@ -119,6 +107,19 @@ class Solver(object):
             if clause.is_tautology():
                 clause._value = True
 
+    def reverse_last_decision(self):
+
+
+    def update_literal():
+
+    def solve(self,):
+        return self.solve
+
+    def unit_propagation(self):
+        unit_clauses = [clause in self.clauses if len(clause) == 1]
+        while unit_clauses:
+            unit_clause = unit_clauses[0]
+
     def simplify(self):
         try:
             simplified = False
@@ -135,10 +136,10 @@ class Solver(object):
             if clause.number_not_falses != 1:
                 continue
             # We got a uni clause
-            for litwrap in clause.litwraps:
-                if litwrap.literal.value == None:
-                    litwrap.literal.update(litwrap.sign)
-                    self.log.append(Node(id=litwrap.literal.id, picked=False))
+            for signed_literal in clause.signed_literals:
+                if signed_literal.literal.value == None:
+                    signed_literal.literal.update(signed_literal.sign)
+                    self.log.append(Node(id=signed_literal.literal.id, picked=False))
                     return False
         return True
 
@@ -194,26 +195,22 @@ class Solver(object):
         except StopIteration:
             print(' '.join([str(node.id) for node in self.log]))
 
-    def add_dimacs_file(self, fname):
-        _literals = {}
+    def add_dimacs_line(self, line: str):
+        clause = []
+        for literal in map(int, line.split()):
+            if literal == 0:
+                continue
+            lid, sign = abs(literal), literal > 0
+            clause.append(SignedLiteral(lid=lid, sign=sign))
+            self.literals.setdefault(lid, Literal(value=None, clauses=[]))
+        self.clauses.append(tuple(clause))
+
+    def add_dimacs_file(self, fname: str):
         with open(fname) as fp:
             for line in fp:
                 if line.startswith('p') or line.startswith('c'):
                     continue
-                clause = Clause()
-                clauseid = len(self.clauses)
-                for c in line.split():
-                    literal = float(c)
-                    literal, sign = abs(literal), literal > 0
-                    if literal == 0:
-                        self.clauses.append(clause)
-                        break
-
-                    _literals.setdefault(literal, Literal(literal))
-                    _literals[literal].clauses.append(clause)
-                    clause.add(literal=_literals[literal], sign=sign)
-        self.literals = OrderedDict(sorted(chain(self.literals.items(), _literals.items()), key=lambda x: x[0]))
-
+                self.add_dimacs_line(line)
 
 def parse_args():
     parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
