@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from typing import List, Dict, NewType, Optional
 from itertools import chain
 import json
+from time import time
 
 
 # CONSTANTS and GLOBALS
@@ -25,8 +26,18 @@ class Log(object):
         self.number_literals = 0
         self.number_clauses = 0
         self.solution = None
+        self.start_time = time()
+        self.iter_log = []
+        self.size_solution = 0
+
+    def update(self):
+        _log = {'assign_calls': self.assign_calls, 'unit_calls': self.unit_calls, 'solve_calls': self.solve_calls,
+                'split_calls': self.split_calls, 'size_solution': self.size_solution, 'time': time() - self.start_time}
+        self.iter_log.append(_log)
+
 
     def save(self):
+        self.duration = time() - self.start_time
         with open(self.log_file, 'a') as f:
             f.write(json.dumps(self.__dict__) + '\n')
 
@@ -36,10 +47,10 @@ class Log(object):
         number_pos_solution = len([i for i in self.solution if i > 0])
         number_neg_solution = number_solution - number_pos_solution
 
-        print('{solved} CNF SAT with {lit} Literals and {cls} clauses\n'
+        print('{solved} CNF SAT with {lit} Literals and {cls} clauses in {time}\n'
               '#Tautologies={tat}. ∥Solution∥={slt} [+{pslt}|-{nslt}]\n'
               '#Calls: [solve={slv}, split={spl}, unit={unt}, assign={asg}]\n'.format(
-            solved=solved, lit=self.number_literals, cls=self.number_clauses,
+            solved=solved, lit=self.number_literals, cls=self.number_clauses, time=time() - self.start_time,
             tat=self.number_tautologies, slt=number_solution, pslt=number_pos_solution, nslt=number_neg_solution,
             slv=self.solve_calls, spl=self.split_calls, unt=self.unit_calls, asg=self.assign_calls
         ))
@@ -106,6 +117,8 @@ def remove_tautologies(clauses: List[Clause], logger: Log) -> List[Clause]:
 
 def _solve(clauses: List[Clause], trues: List[int], logger: Log, solver: int = 1) -> List[int] or bool:
     logger.solve_calls += 1
+    logger.size_solution = len(trues)
+    logger.update()
 
     if len(clauses) == 0:
         return trues
@@ -147,8 +160,8 @@ def count_literals(clauses: List[Clause]) -> int:
     return len(set(chain.from_iterable(clauses)))
 
 
-def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False) -> List[int] or bool:
-    logger = Log(solver)
+def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False, log_file: str = '') -> List[int] or bool:
+    logger = Log(solver, log_file=log_file)
     clauses = parse_dimacs_files(fnames)
     logger.number_clauses = len(clauses)
     logger.number_literals = count_literals(clauses)

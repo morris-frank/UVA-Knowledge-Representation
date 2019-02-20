@@ -46,7 +46,8 @@ def sudoku2dimacs(line: str) -> List[int]:
     return literals
 
 
-def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_file='./sudoku-rules.txt'):
+def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_file='./sudoku-rules.txt',
+                      log_file='sudoku.py.log'):
     fd, temp_file = tempfile.mkstemp(prefix='tmp-sudoku')
     literals = sudoku2dimacs(sudoku)
     with os.fdopen(fd, 'w') as fp:
@@ -56,19 +57,24 @@ def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_
         if verbose:
             print_sudoku(literals)
 
-    solution = solve_files([temp_file, rule_file], verbose=verbose, solver=solver)
+    solution = solve_files([temp_file, rule_file], verbose=verbose, solver=solver, log_file=log_file)
     if verbose:
         if solution:
             print_sudoku(solution)
         print('=' * 29 + '\n\n')
     os.remove(temp_file)
 
+
 def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, processes=1):
-    _solve_line = partial(solve_sudoku_line, verbose=verbose, solver=solver)
+    if not os.path.exists('log'):
+        os.mkdir('log')
+    _solve_line = partial(solve_sudoku_line, verbose=verbose, solver=solver,
+                          log_file='log/' + os.path.basename(fname) + '.log')
     with open(fname) as f:
         sudokus = f.readlines()
     pool = Pool(processes=processes)
-    for _ in tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
+    _tqdm = tqdm if not verbose else lambda x,total : x
+    for _ in _tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
         pass
 
 
