@@ -16,6 +16,7 @@ Clause = NewType('Clause', Dict[int, bool])
 class Log(object):
     def __init__(self, solver: int, log_file='SAT.log'):
         self.solver = solver
+        self.log_file = log_file
         self.assign_calls = 0
         self.unit_calls = 0
         self.solve_calls = 0
@@ -24,6 +25,10 @@ class Log(object):
         self.number_literals = 0
         self.number_clauses = 0
         self.solution = None
+
+    def save(self):
+        with open(self.log_file, 'a') as f:
+            f.write(json.dumps(self.__dict__) + '\n')
 
     def report(self):
         solved = 'Solved' if self.solution else 'Did not solve'
@@ -151,6 +156,8 @@ def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False) -> Li
     logger.solution = solution
     if verbose:
         logger.report()
+    del logger.solution
+    logger.save()
     return solution
 
 

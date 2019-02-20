@@ -1,11 +1,15 @@
 #!/bin/python
 
+import os
 from SAT import solve_files
 from typing import List
 from itertools import repeat
 from colorama import Back
 from argparse import ArgumentParser
 from tqdm import tqdm
+import tempfile
+from multiprocessing import Pool
+from functools import partial
 
 
 def print_sudoku(trues: List[int]):
@@ -42,29 +46,30 @@ def sudoku2dimacs(line: str) -> List[int]:
     return literals
 
 
-def export_sudoku_line(sudoku: str, fname='./.sudoku-tmp.cnf'):
-    open(fname, 'w').close()
-    with open(fname, 'a') as fp:
-        literals = sudoku2dimacs(sudoku)
+def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_file='./sudoku-rules.txt'):
+    fd, temp_file = tempfile.mkstemp(prefix='tmp-sudoku')
+    literals = sudoku2dimacs(sudoku)
+    with os.fdopen(fd, 'w') as fp:
         for literal in literals:
             fp.write('{} 0\n'.format(literal))
-    return literals
 
-
-def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, tmp_file='./.sudoku-tmp.cnf',
-                      rule_file='./sudoku-rules.txt'):
-    _tqdm = tqdm if not verbose else lambda x: x
-    with open(fname) as f:
-        data = f.readlines()
-    for line in _tqdm(data):
-        literals = export_sudoku_line(line)
         if verbose:
             print_sudoku(literals)
-        solution = solve_files([tmp_file, rule_file], verbose=verbose, solver=solver)
-        if verbose:
-            if solution:
-                print_sudoku(solution)
-            print('='*29 + '\n\n')
+
+    solution = solve_files([temp_file, rule_file], verbose=verbose, solver=solver)
+    if verbose:
+        if solution:
+            print_sudoku(solution)
+        print('=' * 29 + '\n\n')
+    os.remove(temp_file)
+
+def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, processes=1):
+    _solve_line = partial(solve_sudoku_line, verbose=verbose, solver=solver)
+    with open(fname) as f:
+        sudokus = f.readlines()
+    pool = Pool(processes=processes)
+    for _ in tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
+        pass
 
 
 def parse_args():
@@ -73,13 +78,14 @@ def parse_args():
     parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
                         required=True)
     parser.add_argument('filename', help='The text file to parse from.', type=str)
+    parser.add_argument('-p', dest='processes', help='Number of processes to start.', type=int, default=4)
     args = parser.parse_args()
     return args
 
 
 def main():
     args = parse_args()
-    solve_sudoku_file(args.filename, verbose=args.verbose, solver=args.solver)
+    solve_sudoku_file(args.filename, verbose=args.verbose, solver=args.solver, processes=args.processes)
 
 
 if __name__ == '__main__':
