@@ -2,8 +2,6 @@
 
 from argparse import ArgumentParser
 from typing import List, Dict, NewType
-from itertools import repeat
-from colorama import Fore, Back, Style
 
 # CONSTANTS and GLOBALS
 ERROR, DONE, NOT_DONE = 0, 1, 2
@@ -13,6 +11,15 @@ CALLSTATS = {'assign': 0, 'unit': 0, 'solve': 0, 'split': 0}
 
 # New TYPES
 Clause = NewType('Clause', Dict[int, bool])
+
+
+def solve_files(fnames: List[str]) -> List[int] or bool:
+    clauses = parse_dimacs_files(fnames)
+    return solve(clauses)
+
+
+def solve_file(fname: str) -> bool:
+    return solve_files([fname])
 
 
 def parse_dimacs_line(line: str) -> Clause:
@@ -103,7 +110,7 @@ def split(clauses: List[Clause], trues: List[int], value: bool) -> (List[Clause]
     return assign(clauses, trues, true)
 
 
-def solve(clauses: List[Clause]) -> List[int]:
+def solve(clauses: List[Clause]) -> List[int] or bool:
     clauses = remove_tautologies(clauses)
     return _solve(clauses)
 
@@ -139,64 +146,13 @@ def _solve(clauses: List[Clause], trues=None) -> List[int] or bool:
         return _solve(*split(clauses, trues, True)) or _solve(*split(clauses, trues, False))
 
 
-def print_solution(trues: List[int]):
-    def print_lit(i):
-        if not i:
-            return Back.LIGHTBLACK_EX + '   ' + cmap[0]
-        else:
-            return ' '.join([cmap[i], str(i), cmap[0]])
-    cmap = [Back.BLACK, Back.WHITE, Back.BLUE, Back.GREEN, Back.RED, Back.YELLOW, Back.MAGENTA, Back.CYAN,
-            Back.LIGHTMAGENTA_EX, Back.LIGHTBLUE_EX]
-    scr = [list(repeat(None, 9)) for _ in range(1, 10)]
-    for true in trues:
-        if true < 0:
-            continue
-        _px = list(map(int, list(str(true))))
-        scr[_px[0]-1][_px[1]-1] = _px[2]
-    viz = ''
-    for y, line in enumerate(scr, start=1):
-        for x, i in enumerate(line, start=1):
-            viz += print_lit(i) + (x % 3 == 0) * ' '
-        viz += '\n' + (y % 3 == 0) * '\n'
-    print(viz)
-
-
-def sudoku_to_dimacs(line: str) -> List[int]:
-    literals = []
-    for i, c in enumerate(line):
-        if c == '\n':
-            continue
-        if c != '.':
-            column = int(i % 9 + 1)
-            row = int(i / 9) + 1
-            literals.append(int('{}{}{}'.format(column, row, c)))
-    # if VERBOSE:
-    print_solution(literals)
-    return literals
-
-
-def export_sudoku_line(line: str, fname='./test.cnt'):
-    open(fname, 'w').close()
-    with open(fname, 'a') as fp:
-        for literal in sudoku_to_dimacs(line):
-            fp.write('{} 0\n'.format(literal))
-
-
-def run_sudoku(line: str):
-    export_sudoku_line(line)
-    clauses = parse_dimacs_files(['./test.cnt', './sudoku-rules.txt'])
-    # input('?')
-    solution = solve(clauses)
-    print_solution(solution)
-
-
 def parse_args():
     global VERBOSE, SOLVER
     parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
     parser.add_argument('-v', dest='verbose', action='store_true')
     parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
                         required=True)
-    parser.add_argument('filename', help='The text file to parse from.')
+    parser.add_argument('filenames', help='The text file to parse from.', type=str, nargs='+')
     args = parser.parse_args()
     VERBOSE = args.verbose
     SOLVER = args.solver
@@ -204,9 +160,8 @@ def parse_args():
 
 
 def main():
-    parse_args()
-    clauses = parse_dimacs_files(['./sudoku-example-processed.txt'])
-    solve(clauses)
+    args = parse_args()
+    solve_files(args.filenames)
 
 
 if __name__ == "__main__":
