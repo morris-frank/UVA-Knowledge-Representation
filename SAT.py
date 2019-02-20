@@ -1,61 +1,47 @@
 #!/bin/python
 
 from argparse import ArgumentParser
-from typing import List, Dict, NewType
+from typing import List, Dict, NewType, Optional
+from itertools import chain
+import json
+
 
 # CONSTANTS and GLOBALS
 ERROR, DONE, NOT_DONE = 0, 1, 2
-VERBOSE = False
-SOLVER = 1
-CALLSTATS = {'assign': 0, 'unit': 0, 'solve': 0, 'split': 0}
 
 # New TYPES
 Clause = NewType('Clause', Dict[int, bool])
 
 
-def solve_files(fnames: List[str]) -> List[int] or bool:
-    clauses = parse_dimacs_files(fnames)
-    return solve(clauses)
+class Log(object):
+    def __init__(self, solver: int, log_file='SAT.log'):
+        self.solver = solver
+        self.assign_calls = 0
+        self.unit_calls = 0
+        self.solve_calls = 0
+        self.split_calls = 0
+        self.number_tautologies = 0
+        self.number_literals = 0
+        self.number_clauses = 0
+        self.solution = None
+
+    def report(self):
+        solved = 'Solved' if self.solution else 'Did not solve'
+        number_solution = len(self.solution)
+        number_pos_solution = len([i for i in self.solution if i > 0])
+        number_neg_solution = number_solution - number_pos_solution
+
+        print('{solved} CNF SAT with {lit} Literals and {cls} clauses\n'
+              '#Tautologies={tat}. ∥Solution∥={slt} [+{pslt}|-{nslt}]\n'
+              '#Calls: [solve={slv}, split={spl}, unit={unt}, assign={asg}]\n'.format(
+            solved=solved, lit=self.number_literals, cls=self.number_clauses,
+            tat=self.number_tautologies, slt=number_solution, pslt=number_pos_solution, nslt=number_neg_solution,
+            slv=self.solve_calls, spl=self.split_calls, unt=self.unit_calls, asg=self.assign_calls
+        ))
 
 
-def solve_file(fname: str) -> bool:
-    return solve_files([fname])
-
-
-def parse_dimacs_line(line: str) -> Clause:
-    return Clause({literal: None for literal in map(int, line.split()) if literal != 0})
-
-
-def parse_dimacs_files(fnames: List[str]) -> List[Clause]:
-    if type(fnames) != list:
-        fnames = [fnames]
-    clauses = []
-    for fname in fnames:
-        with open(fname) as fp:
-            for line in fp:
-                if line.startswith('p') or line.startswith('c'):
-                    continue
-                clauses.append(parse_dimacs_line(line))
-    return clauses
-
-
-def log_print(clauses: List[Clause], trues: List[int]):
-    print('∥clauses∥={},∥trues∥={},#Split={},#Assign={},#Unit={},#Solve={}'.format(
-        len(clauses), len(trues), CALLSTATS['split'], CALLSTATS['assign'], CALLSTATS['unit'], CALLSTATS['solve']))
-
-
-def assign(clauses: List[Clause], trues: List[int], set_true: int) -> (List[Clause], List[int]):
-    """
-    Arguments:
-        clauses {List[Clause]} -- The clauses
-        trues {List[int]} -- The truefull unis
-        set_true {int} -- the literal to set
-
-    Returns:
-        clauses, trues -- Copied and updated clauses and assignments
-    """
-    if VERBOSE:
-        CALLSTATS['assign'] += 1
+def assign(clauses: List[Clause], trues: List[int], set_true: int, logger: Log) -> (List[Clause], List[int]):
+    logger.assign_calls += 1
     new_trues = trues.copy()
     new_trues.append(set_true)
     new_clauses = [clause.copy() for clause in clauses]
@@ -69,19 +55,24 @@ def assign(clauses: List[Clause], trues: List[int], set_true: int) -> (List[Clau
     return new_clauses, new_trues
 
 
-def remove_tautologies(clauses: List[Clause]) -> List[Clause]:
-    for clause in clauses:
-        counts = {}
-        for literal in clause:
-            if counts.setdefault(abs(literal), literal > 0) != (literal > 0):  # Is tautology
-                clauses.remove(clause)
-                break
-    return clauses
+def split(clauses: List[Clause], trues: List[int], value: bool, logger: Log,
+          solver: int = 1) -> (List[Clause], List[int]):
+    logger.split_calls += 1
+    next_literal = 0
+    if solver == 1:
+        next_literal = next(iter(clauses[0].keys()))
+    elif solver == 2:
+        pass
+    elif solver == 3:
+        pass
+
+    true = next_literal if value else -next_literal
+    return assign(clauses, trues, true, logger=logger)
 
 
-def unit_propagation(clauses: List[Clause], trues: List[int]) -> (int, List[Clause], List[int]):
-    if VERBOSE:
-        CALLSTATS['unit'] += 1
+def unit_propagation(clauses: List[Clause], trues: List[int],
+                     logger: Log) -> (int, List[Clause], List[int]):
+    logger.unit_calls += 1
     simplified = False
     status = DONE
     while not simplified:
@@ -90,48 +81,26 @@ def unit_propagation(clauses: List[Clause], trues: List[int]) -> (int, List[Clau
             if len(clause) == 1:
                 simplified = False
                 status = NOT_DONE
-                clauses, trues = assign(clauses, trues, next(iter(clause.keys())))
+                clauses, trues = assign(clauses, trues, next(iter(clause.keys())), logger=logger)
                 break
     return status, clauses, trues
 
 
-def split(clauses: List[Clause], trues: List[int], value: bool) -> (List[Clause], List[int]):
-    if VERBOSE:
-        CALLSTATS['split'] += 1
-    next_literal = 0
-    if SOLVER == 1:
-        next_literal = next(iter(clauses[0].keys()))
-    elif SOLVER == 2:
-        pass
-    elif SOLVER == 3:
-        pass
-
-    true = next_literal if value else -next_literal
-    return assign(clauses, trues, true)
+def remove_tautologies(clauses: List[Clause], logger: Log) -> List[Clause]:
+    n_tautologies = 0
+    for clause in clauses:
+        counts = {}
+        for literal in clause:
+            if counts.setdefault(abs(literal), literal > 0) != (literal > 0):  # Is tautology
+                clauses.remove(clause)
+                n_tautologies += 1
+                break
+    logger.number_tautologies += n_tautologies
+    return clauses
 
 
-def solve(clauses: List[Clause]) -> List[int] or bool:
-    clauses = remove_tautologies(clauses)
-    return _solve(clauses)
-
-
-def _solve(clauses: List[Clause], trues=None) -> List[int] or bool:
-    """Solve the SAT problem described through a set of CNF clauses.
-
-    Arguments:
-        clauses {List[Clause]} -- The clauses
-
-    Keyword Arguments:
-        trues {list} -- The current assingment state (default: [])
-
-    Returns:
-        List[int] -- The final assignment state
-    """
-    if VERBOSE:
-        CALLSTATS['solve'] += 1
-        log_print(clauses, trues)
-    if trues is None:
-        trues = []
+def _solve(clauses: List[Clause], trues: List[int], logger: Log, solver: int = 1) -> List[int] or bool:
+    logger.solve_calls += 1
 
     if len(clauses) == 0:
         return trues
@@ -139,29 +108,69 @@ def _solve(clauses: List[Clause], trues=None) -> List[int] or bool:
     if any(len(clause) == 0 for clause in clauses):
         return False
 
-    s, clauses, trues = unit_propagation(clauses, trues)
+    s, clauses, trues = unit_propagation(clauses, trues, logger)
     if s == NOT_DONE:
-        return _solve(clauses, trues)
+        return _solve(clauses, trues, logger, solver)
     else:
-        return _solve(*split(clauses, trues, True)) or _solve(*split(clauses, trues, False))
+        return _solve(*split(clauses, trues, True, logger), logger=logger, solver=solver) \
+               or _solve(*split(clauses, trues, False, logger), logger=logger, solver=solver)
+
+
+def solve(clauses: List[Clause], logger: Log, solver: int = 1) -> List[int] or bool:
+    clauses = remove_tautologies(clauses, logger=logger)
+    return _solve(clauses, [], logger=logger, solver=solver)
+
+
+def parse_dimacs_line(line: str) -> Clause:
+    return Clause({literal: None for literal in map(int, line.split()) if literal != 0})
+
+
+def parse_dimacs_files(fnames: List[str]) -> List[Clause]:
+    if type(fnames) != list:
+        fnames = [fnames]
+    clauses = []
+    for fname in map(str, fnames):
+        with open(fname) as fp:
+            for line in fp:
+                if line.startswith('p') or line.startswith('c'):
+                    continue
+                clauses.append(parse_dimacs_line(line))
+    return clauses
+
+
+def count_literals(clauses: List[Clause]) -> int:
+    return len(set(chain.from_iterable(clauses)))
+
+
+def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False) -> List[int] or bool:
+    logger = Log(solver)
+    clauses = parse_dimacs_files(fnames)
+    logger.number_clauses = len(clauses)
+    logger.number_literals = count_literals(clauses)
+    solution = solve(clauses, solver=solver, logger=logger)
+    logger.solution = solution
+    if verbose:
+        logger.report()
+    return solution
+
+
+def solve_file(fname: str, **kwargs) -> bool:
+    return solve_files([fname], kwargs)
 
 
 def parse_args():
-    global VERBOSE, SOLVER
     parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
     parser.add_argument('-v', dest='verbose', action='store_true')
     parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
                         required=True)
     parser.add_argument('filenames', help='The text file to parse from.', type=str, nargs='+')
     args = parser.parse_args()
-    VERBOSE = args.verbose
-    SOLVER = args.solver
     return args
 
 
 def main():
     args = parse_args()
-    solve_files(args.filenames)
+    solve_files(args.filenames, solver=args.solver, verbose=args.verbose)
 
 
 if __name__ == "__main__":

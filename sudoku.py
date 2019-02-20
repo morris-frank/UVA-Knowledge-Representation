@@ -5,6 +5,7 @@ from typing import List
 from itertools import repeat
 from colorama import Back
 from argparse import ArgumentParser
+from tqdm import tqdm
 
 
 def print_sudoku(trues: List[int]):
@@ -50,12 +51,17 @@ def export_sudoku_line(sudoku: str, fname='./.sudoku-tmp.cnf'):
     return literals
 
 
-def solve_sudoku_file(fname: str, tmp_file='./.sudoku-tmp.cnf', rule_file='./sudoku-rules.txt'):
-    with open(fname) as fp:
-        for line in fp:
-            literals = export_sudoku_line(line)
+def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, tmp_file='./.sudoku-tmp.cnf',
+                      rule_file='./sudoku-rules.txt'):
+    _tqdm = tqdm if not verbose else lambda x: x
+    with open(fname) as f:
+        data = f.readlines()
+    for line in _tqdm(data):
+        literals = export_sudoku_line(line)
+        if verbose:
             print_sudoku(literals)
-            solution = solve_files([tmp_file, rule_file])
+        solution = solve_files([tmp_file, rule_file], verbose=verbose, solver=solver)
+        if verbose:
             if solution:
                 print_sudoku(solution)
             print('='*29 + '\n\n')
@@ -73,7 +79,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    solve_sudoku_file(args.filename)
+    solve_sudoku_file(args.filename, verbose=args.verbose, solver=args.solver)
 
 
 if __name__ == '__main__':
