@@ -1,15 +1,17 @@
 #!/bin/python
 
 import os
-from SAT import solve_files
 from typing import List
 from itertools import repeat
 from colorama import Back
 from argparse import ArgumentParser
-from tqdm import tqdm
 import tempfile
 from multiprocessing import Pool
 from functools import partial
+
+
+from SAT import solve_files
+from tqdm import tqdm
 
 
 def print_sudoku(trues: List[int]):
@@ -22,10 +24,8 @@ def print_sudoku(trues: List[int]):
             return ' '.join([cmap[lit], str(lit), cmap[0]])
     scr = [list(repeat(None, 9)) for _ in range(1, 10)]
     for true in trues:
-        if true < 0:
-            continue
-        _px = list(map(int, list(str(true))))
-        scr[_px[0]-1][_px[1]-1] = _px[2]
+        if true > 0:
+            scr[int(true/100)-1][int(true%100/10)-1] = int(true%10)
     viz = ''
     for y, line in enumerate(scr, start=1):
         for x, i in enumerate(line, start=1):

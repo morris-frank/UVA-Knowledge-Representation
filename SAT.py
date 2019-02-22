@@ -1,7 +1,7 @@
 #!/bin/python
 
 from argparse import ArgumentParser
-from typing import List, Dict, NewType, Optional
+from typing import List, Dict, NewType
 from itertools import chain
 import json
 from time import time
@@ -27,6 +27,7 @@ class Log(object):
         self.number_clauses = 0
         self.solution = None
         self.start_time = time()
+        self.duration = 0
         self.iter_log = []
         self.size_solution = 0
 
@@ -34,7 +35,6 @@ class Log(object):
         _log = {'assign_calls': self.assign_calls, 'unit_calls': self.unit_calls, 'solve_calls': self.solve_calls,
                 'split_calls': self.split_calls, 'size_solution': self.size_solution, 'time': time() - self.start_time}
         self.iter_log.append(_log)
-
 
     def save(self):
         self.duration = time() - self.start_time
