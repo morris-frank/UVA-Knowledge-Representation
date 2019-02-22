@@ -5,6 +5,7 @@ from typing import List, Dict, NewType
 from itertools import chain
 import json
 from time import time
+import os
 
 
 # CONSTANTS and GLOBALS
@@ -43,8 +44,12 @@ class Log(object):
 
     def report(self):
         solved = 'Solved' if self.solution else 'Did not solve'
-        number_solution = len(self.solution)
-        number_pos_solution = len([i for i in self.solution if i > 0])
+        if not self.solution:
+            number_solution = 0
+            number_pos_solution = 0
+        else:
+            number_solution = len(self.solution)
+            number_pos_solution = len([i for i in self.solution if i > 0])
         number_neg_solution = number_solution - number_pos_solution
 
         print('{solved} CNF SAT with {lit} Literals and {cls} clauses in {time}\n'
@@ -160,7 +165,7 @@ def count_literals(clauses: List[Clause]) -> int:
     return len(set(chain.from_iterable(clauses)))
 
 
-def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False, log_file: str = '') -> List[int] or bool:
+def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False, log_file: str = 'SAT.log') -> List[int] or bool:
     logger = Log(solver, log_file=log_file)
     clauses = parse_dimacs_files(fnames)
     logger.number_clauses = len(clauses)
@@ -190,7 +195,10 @@ def parse_args():
 
 def main():
     args = parse_args()
-    solve_files(args.filenames, solver=args.solver, verbose=args.verbose)
+    if not os.path.exists('log'):
+        os.mkdir('log')
+    log_file = '_'.join([os.path.basename(f) for f in args.filenames])
+    solve_files(args.filenames, solver=args.solver, verbose=args.verbose, log_file='log/' + log_file + '.log')
 
 
 if __name__ == "__main__":
