@@ -19,8 +19,7 @@ Clause = NewType('Clause', Dict[str, None])
 Literal = NewType('Literal', str)
 
 GLOBAL_CLAUSES = {}
-LEARNED_CLAUSE = None
-CURRENT_UNIT_CLAUSE = None
+GLOBAL_LITERALS = {}
 
 
 def abs_literal(literal: Literal) -> Literal:
@@ -40,16 +39,6 @@ def print_clauses(clauses: Dict[int, Clause]):
         print('{}: ∨ '.join(clause.keys()).format(idx))
 
 
-def clean_clause(clause: Clause):
-    new_clause = clause.copy()
-    for literal in clause.copy():
-        neg = neg_literal(literal)
-        if neg in clause:
-            del new_clause[neg]
-            del new_clause[literal]
-
-
-
 class Stats(object):
     def __init__(self, solver: int, log_file='SAT.log'):
         self.solver = solver
@@ -61,6 +50,7 @@ class Stats(object):
         self.number_tautologies = 0
         self.number_literals = 0
         self.number_clauses = 0
+        self.number_backtracks = 0
         self.solution = None
         self.start_time = time()
         self.duration = 0
@@ -69,7 +59,8 @@ class Stats(object):
 
     def update(self):
         _log = {'assign_calls': self.assign_calls, 'unit_calls': self.unit_calls, 'solve_calls': self.solve_calls,
-                'split_calls': self.split_calls, 'size_solution': self.size_solution, 'time': time() - self.start_time}
+                'split_calls': self.split_calls, 'size_solution': self.size_solution, 'time': time() - self.start_time,
+                'number_backtracks': self.number_backtracks}
         self.iter_log.append(_log)
 
     def save(self):
@@ -88,10 +79,11 @@ class Stats(object):
 
         number_pos_solution = number_solution - number_neg_solution
         print('{solved} CNF SAT with {lit} Literals and {cls} clauses in {time:.3f}s\n'
-              '#Tautologies={tat}. ∥Solution∥={slt} [+{pslt}|-{nslt}]\n'
+              '#Tautologies={tat}. ∥Solution∥={slt} [+{pslt}|-{nslt}], #Backtracks: {bkt}\n'
               '#Calls: [solve={slv}, split={spl}, unit={unt}, assign={asg}]\n'.format(
                 solved=solved, lit=self.number_literals, cls=self.number_clauses, time=time() - self.start_time,
                 tat=self.number_tautologies, slt=number_solution, pslt=number_pos_solution, nslt=number_neg_solution,
+                bkt=self.number_backtracks,
                 slv=self.solve_calls, spl=self.split_calls, unt=self.unit_calls, asg=self.assign_calls
                 ))
 
@@ -113,24 +105,30 @@ def assign(clauses: Dict[int, Clause], solution: List[Literal], to_set_true: Lit
 
 
 def split(clauses: Dict[int, Clause], stats: Stats, solver: int) -> Literal:
-
     stats.split_calls += 1
     next_literal = 0
     if solver == 1:
         next_literal = next(iter(next(iter(clauses.values())).keys()))
     elif solver == 2:
-        pass
+        max_count = 0
+        max_literal = None
+        for literal in GLOBAL_LITERALS:
+            count = len([None for clause in clauses.values() if literal in clause])
+            if count > max_count:
+                max_literal = literal
+                max_count = count
+        next_literal = max_literal
+        print(max_count)
     elif solver == 3:
         pass
+    print(next_literal)
     return next_literal
 
 def unit_propagation(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats)\
         -> (int, Dict[int, Clause], List[Literal]):
-    global CURRENT_UNIT_CLAUSE
     stats.unit_calls += 1
     for idx,clause in clauses.items():
         if len(clause) == 1:
-            CURRENT_UNIT_CLAUSE = idx
             return NOT_DONE, assign(clauses, solution, next(iter(clause.keys())), stats=stats)
     return DONE, (clauses, solution)
 
@@ -150,7 +148,7 @@ def remove_tautologies(clauses: Dict[int, Clause], stats: Stats) -> Dict[int, Cl
 
 
 def _solve(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats, solver: int) -> List[Literal] or bool:
-    global LEARNED_CLAUSE, GLOBAL_CLAUSES, CURRENT_UNIT_CLAUSE
+    global GLOBAL_CLAUSES
     stats.solve_calls += 1
     stats.size_solution = len(solution)
     stats.update()
@@ -164,50 +162,23 @@ def _solve(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats, so
     for idx, clause in clauses.items():
         if len(clause) == 0:
             log.debug('Backtrack')
-            print('BACKTRACK')
-            LEARNED_CLAUSE = GLOBAL_CLAUSES[idx].copy()
+            stats.number_backtracks += 1
             return
 
     s, (clauses, solution) = unit_propagation(clauses, solution, stats)
     if s == NOT_DONE:
-        usolve =  _solve(clauses, solution, stats, solver)
-        if LEARNED_CLAUSE != None:
-            nref = 0
-            for literal in LEARNED_CLAUSE:
-                nliteral = neg_literal(literal)
-                nref += len([True for clause in clauses.values() if literal in clause or nliteral in clause]) > 0
-            if nref == 1:
-                return usolve
-            for literal in GLOBAL_CLAUSES[CURRENT_UNIT_CLAUSE].keys():
-                if neg_literal(literal) in LEARNED_CLAUSE:
-                    LEARNED_CLAUSE.pop(neg_literal(literal))
-                else:
-                    LEARNED_CLAUSE[literal] = None
-        return usolve
+        return _solve(clauses, solution, stats, solver)
     else:
-        print('SPLIT')
         split_literal = split(clauses, stats, solver)
-        _solution = _solve(*assign(clauses, solution, split_literal, stats=stats), stats=stats, solver=solver)
-        if _solution:
-            return _solution
-        elif LEARNED_CLAUSE == None:
-            _solution = _solve(*assign(clauses, solution, neg_literal(split_literal), stats=stats), stats=stats, solver=solver)
-
-        if split_literal in LEARNED_CLAUSE:
-            idx = len(GLOBAL_CLAUSES)
-            GLOBAL_CLAUSES[idx] = LEARNED_CLAUSE.copy()
-            clauses[idx] = LEARNED_CLAUSE.copy()
-            LEARNED_CLAUSE = None
-            return _solve(clauses, solution, stats, solver)
-        else:
-            return _solution
-
+        return _solve(*assign(clauses, solution, split_literal, stats=stats), stats=stats, solver=solver)\
+               or _solve(*assign(clauses, solution, neg_literal(split_literal), stats=stats), stats=stats, solver=solver)
 
 
 def solve(clauses: Dict[int, Clause], stats: Stats, solver: int) -> List[Literal] or bool:
-    global GLOBAL_CLAUSES
+    global GLOBAL_CLAUSES, GLOBAL_LITERALS
     clauses = remove_tautologies(clauses, stats=stats)
     GLOBAL_CLAUSES = {idx: clause.copy() for idx, clause in clauses.items()}
+    GLOBAL_LITERALS = set(map(abs_literal, chain.from_iterable(clauses.values())))
     return _solve(clauses, [], stats=stats, solver=solver)
 
 
