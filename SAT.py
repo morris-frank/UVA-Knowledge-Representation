@@ -8,10 +8,13 @@ from time import time
 import os
 import logging
 
-log = logging.getLogger('SAT')
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 # CONSTANTS and GLOBALS
 ERROR, DONE, NOT_DONE = 0, 1, 2
+
+SPLITS = ['x2', 'x1']
 
 # New TYPES
 Clause = NewType('Clause', Dict[str, None])
@@ -19,14 +22,25 @@ Literal = NewType('Literal', str)
 
 
 def abs_literal(literal: Literal):
-    return literal if value(literal) else literal[1:]
+    return literal if value_literal(literal) else literal[1:]
 
 
 def neg_literal(literal: Literal):
-    return '-' + literal if value(literal) else literal[1:]
+    return '-' + literal if value_literal(literal) else literal[1:]
 
-def value(literal: Literal):
+
+def value_literal(literal: Literal):
     return not literal.startswith('-')
+
+
+def print_clauses(clauses: List[Clause]):
+    for clause in clauses:
+        print(' ∨ '.join(clause.keys()))
+
+
+def clean_clause(clause: Clause):
+    pass
+
 
 
 class Stats(object):
@@ -91,17 +105,19 @@ def assign(clauses: List[Clause], solution: List[Literal], to_set_true: Literal,
     return new_clauses, new_solution
 
 
-def split(clauses: List[Clause], solution: List[Literal], value: bool, stats: Stats, solver: int = 1)\
+def split(clauses: List[Clause], solution: List[Literal], value: bool, stats: Stats, solver: int)\
         -> (List[Clause], List[Literal]):
+
     stats.split_calls += 1
-    next_literal = 0
+    to_set_true = 0
     if solver == 1:
         next_literal = next(iter(clauses[0].keys()))
+        to_set_true = next_literal if value else neg_literal(next_literal)
     elif solver == 2:
-        pass
+        to_set_true = SPLITS.pop()
     elif solver == 3:
         pass
-    to_set_true = next_literal if value else neg_literal(next_literal)
+    log.debug('split: {}'.format(to_set_true))
     return assign(clauses, solution, to_set_true, stats=stats)
 
 
@@ -114,6 +130,7 @@ def unit_propagation(clauses: List[Clause], solution: List[Literal], stats: Stat
         simplified = True
         for clause in clauses:
             if len(clause) == 1:
+                #log.debug('found unit clause')
                 simplified = False
                 status = NOT_DONE
                 clauses, solution = assign(clauses, solution, next(iter(clause.keys())), stats=stats)
@@ -127,7 +144,7 @@ def remove_tautologies(clauses: List[Clause], stats: Stats) -> List[Clause]:
         counts = {}
         for literal in clause:
             # If it is a tautology
-            if counts.setdefault(abs_literal(literal), value(literal)) != value(literal):
+            if counts.setdefault(abs_literal(literal), value_literal(literal)) != value_literal(literal):
                 clauses.remove(clause)
                 n_tautologies += 1
                 break
@@ -135,10 +152,11 @@ def remove_tautologies(clauses: List[Clause], stats: Stats) -> List[Clause]:
     return clauses
 
 
-def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver: int = 1) -> List[Literal] or bool:
+def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver: int) -> List[Literal] or bool:
     stats.solve_calls += 1
     stats.size_solution = len(solution)
     stats.update()
+
 
     # If no clauses left to be satisfied, then we finished
     if len(clauses) == 0:
@@ -146,17 +164,22 @@ def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver:
 
     # A clause is empty thus not satisfiable ⇒ current solution is incorrect
     if any(len(clause) == 0 for clause in clauses):
+        log.debug('Backtrack')
+        print_clauses(clauses)
         return False
 
     s, clauses, solution = unit_propagation(clauses, solution, stats)
     if s == NOT_DONE:
         return _solve(clauses, solution, stats, solver)
     else:
-        return _solve(*split(clauses, solution, True, stats), stats=stats, solver=solver) \
-               or _solve(*split(clauses, solution, False, stats), stats=stats, solver=solver)
+        lsolve = _solve(*split(clauses, solution, True, stats, solver), stats=stats, solver=solver)
+        if lsolve:
+            return lsolve
+        rsolve = solve(*split(clauses, solution, False, stats, solver), stats=stats, solver=solver)
+        return rsolve
 
 
-def solve(clauses: List[Clause], stats: Stats, solver: int = 1) -> List[Literal] or bool:
+def solve(clauses: List[Clause], stats: Stats, solver: int) -> List[Literal] or bool:
     clauses = remove_tautologies(clauses, stats=stats)
     return _solve(clauses, [], stats=stats, solver=solver)
 
@@ -182,7 +205,7 @@ def count_literals(clauses: List[Clause]) -> int:
     return len(set(filter(lambda x: not x.startswith('-'), chain.from_iterable(clauses))))
 
 
-def solve_files(fnames: List[str], solver: int = 1, verbose: bool = False, log_file: str = 'SAT.log')\
+def solve_files(fnames: List[str], solver: int, verbose: bool = False, log_file: str = 'SAT.log')\
         -> List[Literal] or bool:
     stats = Stats(solver, log_file=log_file)
     clauses = parse_dimacs_files(fnames)
@@ -209,6 +232,10 @@ def parse_args():
                         required=True)
     parser.add_argument('filenames', help='The text file to parse from.', type=str, nargs='+')
     args = parser.parse_args()
+    if args.debug:
+        log.setLevel(logging.DEBUG)
+    elif args.verbose:
+        log.setLevel(logging.INFO)
     return args
 
 
@@ -220,7 +247,7 @@ def main():
     solution = solve_files(args.filenames, solver=args.solver, verbose=args.verbose,
                            log_file='log/' + log_file + '.log')
     if solution:
-        print(list(filter(value, solution)))
+        print(list(filter(value_literal, solution)))
 
 
 if __name__ == "__main__":
