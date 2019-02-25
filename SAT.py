@@ -12,7 +12,8 @@ import os
 ERROR, DONE, NOT_DONE = 0, 1, 2
 
 # New TYPES
-Clause = NewType('Clause', Dict[int, bool])
+Literal = NewType('Literal', int)
+Clause = NewType('Clause', Dict[Literal, None])
 
 
 class Log(object):
@@ -61,23 +62,24 @@ class Log(object):
         ))
 
 
-def assign(clauses: List[Clause], trues: List[int], set_true: int, logger: Log) -> (List[Clause], List[int]):
+def assign(clauses: List[Clause], solution: List[Literal], to_set_true: int, logger: Log)\
+        -> (List[Clause], List[Literal]):
     logger.assign_calls += 1
-    new_trues = trues.copy()
-    new_trues.append(set_true)
+    new_solution = solution.copy()
+    new_solution.append(to_set_true)
     new_clauses = [clause.copy() for clause in clauses]
 
     for clause in new_clauses.copy():
-        if set_true in clause:  # Clause is now true
+        if to_set_true in clause:  # Clause is now true
             new_clauses.remove(clause)
         else:  # Literal not important anymore for clause
-            clause.pop(set_true, None)
-            clause.pop(-set_true, None)
-    return new_clauses, new_trues
+            #clause.pop(to_set_true, None)
+            clause.pop(-to_set_true, None)
+    return new_clauses, new_solution
 
 
-def split(clauses: List[Clause], trues: List[int], value: bool, logger: Log,
-          solver: int = 1) -> (List[Clause], List[int]):
+def split(clauses: List[Clause], solution: List[Literal], value: bool, logger: Log, solver: int = 1)\
+        -> (List[Clause], List[Literal]):
     logger.split_calls += 1
     next_literal = 0
     if solver == 1:
@@ -87,12 +89,12 @@ def split(clauses: List[Clause], trues: List[int], value: bool, logger: Log,
     elif solver == 3:
         pass
 
-    true = next_literal if value else -next_literal
-    return assign(clauses, trues, true, logger=logger)
+    next_literal = next_literal if value else -next_literal
+    return assign(clauses, solution, next_literal, logger=logger)
 
 
-def unit_propagation(clauses: List[Clause], trues: List[int],
-                     logger: Log) -> (int, List[Clause], List[int]):
+def unit_propagation(clauses: List[Clause], solution: List[Literal], logger: Log)\
+        -> (int, List[Clause], List[Literal]):
     logger.unit_calls += 1
     simplified = False
     status = DONE
@@ -102,9 +104,9 @@ def unit_propagation(clauses: List[Clause], trues: List[int],
             if len(clause) == 1:
                 simplified = False
                 status = NOT_DONE
-                clauses, trues = assign(clauses, trues, next(iter(clause.keys())), logger=logger)
+                clauses, solution = assign(clauses, solution, next(iter(clause.keys())), logger=logger)
                 break
-    return status, clauses, trues
+    return status, clauses, solution
 
 
 def remove_tautologies(clauses: List[Clause], logger: Log) -> List[Clause]:
