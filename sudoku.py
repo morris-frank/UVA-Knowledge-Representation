@@ -14,18 +14,18 @@ from SAT import solve_files
 from tqdm import tqdm
 
 
-def print_sudoku(trues: List[int]):
+def print_sudoku(trues: List[str]):
     def print_lit(lit):
         cmap = [Back.BLACK, Back.WHITE, Back.BLUE, Back.GREEN, Back.RED, Back.YELLOW, Back.MAGENTA, Back.CYAN,
                 Back.LIGHTMAGENTA_EX, Back.LIGHTBLUE_EX]
         if not lit:
             return Back.LIGHTBLACK_EX + '   ' + cmap[0]
         else:
-            return ' '.join([cmap[lit], str(lit), cmap[0]])
-    scr = [list(repeat(None, 9)) for _ in range(1, 10)]
+            return ' '.join([cmap[int(lit)], lit, cmap[0]])
+    scr = [[0 for x in range(9)] for y in range(9)]
     for true in trues:
-        if true > 0:
-            scr[int(true/100)-1][int(true%100/10)-1] = int(true%10)
+        if not true.startswith('-'):
+            scr[int(true[0]) - 1][int(true[1]) - 1] = true[2]
     viz = ''
     for y, line in enumerate(scr, start=1):
         for x, i in enumerate(line, start=1):
@@ -34,7 +34,7 @@ def print_sudoku(trues: List[int]):
     print(viz)
 
 
-def sudoku2dimacs(line: str) -> List[int]:
+def sudoku2dimacs(line: str) -> List[str]:
     literals = []
     for i, c in enumerate(line):
         if c == '\n':
@@ -42,7 +42,7 @@ def sudoku2dimacs(line: str) -> List[int]:
         if c != '.':
             column = int(i % 9 + 1)
             row = int(i / 9) + 1
-            literals.append(int('{}{}{}'.format(column, row, c)))
+            literals.append('{}{}{}'.format(column, row, c))
     return literals
 
 
@@ -72,10 +72,14 @@ def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, proces
                           log_file='log/' + os.path.basename(fname) + '.log')
     with open(fname) as f:
         sudokus = f.readlines()
-    pool = Pool(processes=processes)
-    _tqdm = tqdm if not verbose else lambda x,total : x
-    for _ in _tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
-        pass
+    _tqdm = tqdm if not verbose else lambda x, total: x
+    if processes > 1:
+        pool = Pool(processes=processes)
+        for _ in _tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
+            pass
+    else:
+        for sudoku in _tqdm(sudokus, total=len(sudokus)):
+            _solve_line(sudoku)
 
 
 def parse_args():
