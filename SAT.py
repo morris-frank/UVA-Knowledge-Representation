@@ -33,9 +33,9 @@ def value_literal(literal: Literal):
     return not literal.startswith('-')
 
 
-def print_clauses(clauses: List[Clause]):
-    for clause in clauses:
-        print(' ∨ '.join(clause.keys()))
+def print_clauses(clauses: Dict[int, Clause]):
+    for idx, clause in clauses.items():
+        print('{}: ∨ '.join(clause.keys()).format(idx))
 
 
 def clean_clause(clause: Clause):
@@ -89,29 +89,29 @@ class Stats(object):
                 ))
 
 
-def assign(clauses: List[Clause], solution: List[Literal], to_set_true: Literal, stats: Stats)\
-        -> (List[Clause], List[Literal]):
+def assign(clauses: Dict[int, Clause], solution: List[Literal], to_set_true: Literal, stats: Stats)\
+        -> (Dict[int, Clause], List[Literal]):
     log.debug('assign: {}'.format(to_set_true))
     stats.assign_calls += 1
     new_solution = solution.copy()
     new_solution.append(to_set_true)
-    new_clauses = [clause.copy() for clause in clauses]
+    new_clauses = {idx: clause.copy() for idx, clause in clauses.items()}
 
-    for clause in new_clauses.copy():
+    for idx, clause in new_clauses.copy().items():
         if to_set_true in clause:  # Clause is now true
-            new_clauses.remove(clause)
+            del new_clauses[idx]
         else:  # Literal not important anymore for clause
             clause.pop(neg_literal(to_set_true), None)
     return new_clauses, new_solution
 
 
-def split(clauses: List[Clause], solution: List[Literal], value: bool, stats: Stats, solver: int)\
-        -> (List[Clause], List[Literal]):
+def split(clauses: Dict[int, Clause], solution: List[Literal], value: bool, stats: Stats, solver: int)\
+        -> (Dict[int, Clause], List[Literal]):
 
     stats.split_calls += 1
     to_set_true = 0
     if solver == 1:
-        next_literal = next(iter(clauses[0].keys()))
+        next_literal = next(iter(next(iter(clauses.values())).keys()))
         to_set_true = next_literal if value else neg_literal(next_literal)
     elif solver == 2:
         to_set_true = SPLITS.pop()
@@ -121,14 +121,14 @@ def split(clauses: List[Clause], solution: List[Literal], value: bool, stats: St
     return assign(clauses, solution, to_set_true, stats=stats)
 
 
-def unit_propagation(clauses: List[Clause], solution: List[Literal], stats: Stats)\
-        -> (int, List[Clause], List[Literal]):
+def unit_propagation(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats)\
+        -> (int, Dict[int, Clause], List[Literal]):
     stats.unit_calls += 1
     simplified = False
     status = DONE
     while not simplified:
         simplified = True
-        for clause in clauses:
+        for clause in clauses.values():
             if len(clause) == 1:
                 #log.debug('found unit clause')
                 simplified = False
@@ -138,21 +138,21 @@ def unit_propagation(clauses: List[Clause], solution: List[Literal], stats: Stat
     return status, clauses, solution
 
 
-def remove_tautologies(clauses: List[Clause], stats: Stats) -> List[Clause]:
+def remove_tautologies(clauses: Dict[int, Clause], stats: Stats) -> Dict[int, Clause]:
     n_tautologies = 0
-    for clause in clauses:
+    for idx, clause in clauses.copy().items():
         counts = {}
         for literal in clause:
             # If it is a tautology
             if counts.setdefault(abs_literal(literal), value_literal(literal)) != value_literal(literal):
-                clauses.remove(clause)
+                del clauses[idx]
                 n_tautologies += 1
                 break
     stats.number_tautologies += n_tautologies
     return clauses
 
 
-def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver: int) -> List[Literal] or bool:
+def _solve(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats, solver: int) -> List[Literal] or bool:
     stats.solve_calls += 1
     stats.size_solution = len(solution)
     stats.update()
@@ -163,9 +163,9 @@ def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver:
         return solution
 
     # A clause is empty thus not satisfiable ⇒ current solution is incorrect
-    if any(len(clause) == 0 for clause in clauses):
+    if any(len(clause) == 0 for clause in clauses.values()):
         log.debug('Backtrack')
-        print_clauses(clauses)
+        #print_clauses(clauses)
         return False
 
     s, clauses, solution = unit_propagation(clauses, solution, stats)
@@ -175,11 +175,11 @@ def _solve(clauses: List[Clause], solution: List[Literal], stats: Stats, solver:
         lsolve = _solve(*split(clauses, solution, True, stats, solver), stats=stats, solver=solver)
         if lsolve:
             return lsolve
-        rsolve = solve(*split(clauses, solution, False, stats, solver), stats=stats, solver=solver)
+        rsolve = _solve(*split(clauses, solution, False, stats, solver), stats=stats, solver=solver)
         return rsolve
 
 
-def solve(clauses: List[Clause], stats: Stats, solver: int) -> List[Literal] or bool:
+def solve(clauses: Dict[int, Clause], stats: Stats, solver: int) -> List[Literal] or bool:
     clauses = remove_tautologies(clauses, stats=stats)
     return _solve(clauses, [], stats=stats, solver=solver)
 
@@ -188,21 +188,23 @@ def parse_dimacs_line(line: str) -> Clause:
     return Clause({literal: None for literal in line.split() if literal != '0'})
 
 
-def parse_dimacs_files(fnames: List[str]) -> List[Clause]:
+def parse_dimacs_files(fnames: List[str]) -> Dict[int, Clause]:
     if type(fnames) != list:
         fnames = [fnames]
-    clauses = []
+    clauses = {}
+    idx = 1
     for fname in map(str, fnames):
         with open(fname) as fp:
             for line in fp:
                 if line.startswith('p') or line.startswith('c'):
                     continue
-                clauses.append(parse_dimacs_line(line))
+                clauses[idx] = parse_dimacs_line(line)
+                idx += 1
     return clauses
 
 
-def count_literals(clauses: List[Clause]) -> int:
-    return len(set(filter(lambda x: not x.startswith('-'), chain.from_iterable(clauses))))
+def count_literals(clauses: Dict[int, Clause]) -> int:
+    return len(set(filter(lambda x: not x.startswith('-'), chain.from_iterable(clauses.values()))))
 
 
 def solve_files(fnames: List[str], solver: int, verbose: bool = False, log_file: str = 'SAT.log')\
