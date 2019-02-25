@@ -20,6 +20,7 @@ Literal = NewType('Literal', str)
 
 GLOBAL_CLAUSES = {}
 GLOBAL_LITERALS = {}
+GLOBAL_LITERAL_SCORES = {}
 
 
 def abs_literal(literal: Literal) -> Literal:
@@ -58,12 +59,12 @@ class Stats(object):
         self.size_solution = 0
 
     def update(self):
-        _log = {'assign_calls': self.assign_calls, 'unit_calls': self.unit_calls, 'solve_calls': self.solve_calls,
-                'split_calls': self.split_calls, 'size_solution': self.size_solution, 'time': time() - self.start_time,
-                'number_backtracks': self.number_backtracks}
+        _log = [self.split_calls, self.solve_calls, self.assign_calls, self.unit_calls, self.number_backtracks,
+                self.size_solution, time() - self.start_time]
         self.iter_log.append(_log)
 
     def save(self):
+        self.update()
         self.duration = time() - self.start_time
         with open(self.log_file, 'a') as f:
             f.write(json.dumps(self.__dict__) + '\n')
@@ -105,23 +106,31 @@ def assign(clauses: Dict[int, Clause], solution: List[Literal], to_set_true: Lit
 
 
 def split(clauses: Dict[int, Clause], stats: Stats, solver: int) -> Literal:
+    global GLOBAL_LITERAL_SCORES, GLOBAL_LITERALS
     stats.split_calls += 1
+    stats.update()
     next_literal = 0
     if solver == 1:
         next_literal = next(iter(next(iter(clauses.values())).keys()))
     elif solver == 2:
         max_count = 0
-        max_literal = None
+        next_literal = None
         for literal in GLOBAL_LITERALS:
             count = len([None for clause in clauses.values() if literal in clause])
             if count > max_count:
-                max_literal = literal
+                next_literal = literal
                 max_count = count
-        next_literal = max_literal
-        print(max_count)
     elif solver == 3:
-        pass
-    print(next_literal)
+        max_score = 0
+        next_literal = None
+        for clause in clauses.values():
+            for literal in clause:
+                if next_literal == None:
+                    next_literal = literal
+                score = GLOBAL_LITERAL_SCORES.get(literal, 0)
+                if  score > max_score:
+                    next_literal = literal
+                    max_score = score
     return next_literal
 
 def unit_propagation(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats)\
@@ -150,9 +159,7 @@ def remove_tautologies(clauses: Dict[int, Clause], stats: Stats) -> Dict[int, Cl
 def _solve(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats, solver: int) -> List[Literal] or bool:
     global GLOBAL_CLAUSES
     stats.solve_calls += 1
-    stats.size_solution = len(solution)
-    stats.update()
-
+    stats.size_solution = len([None for literal in solution if value_literal(literal)])
 
     # If no clauses left to be satisfied, then we finished
     if len(clauses) == 0:
@@ -160,9 +167,13 @@ def _solve(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats, so
 
     # A clause is empty thus not satisfiable ⇒ current solution is incorrect
     for idx, clause in clauses.items():
+        b = 1
         if len(clause) == 0:
             log.debug('Backtrack')
             stats.number_backtracks += 1
+            for literal in GLOBAL_CLAUSES[idx]:
+                GLOBAL_LITERAL_SCORES.setdefault(literal, 0)
+                GLOBAL_LITERAL_SCORES[literal] +=  b
             return
 
     s, (clauses, solution) = unit_propagation(clauses, solution, stats)
