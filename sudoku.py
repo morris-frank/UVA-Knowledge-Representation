@@ -31,7 +31,7 @@ def print_sudoku(trues: List[str]):
         for x, i in enumerate(line, start=1):
             viz += print_lit(i) + (x % 3 == 0) * ' '
         viz += '\n' + (y % 3 == 0) * '\n'
-    print(viz)
+    print(viz + Back.RESET)
 
 
 def sudoku2dimacs(line: str) -> List[str]:
