@@ -94,7 +94,7 @@ def split(clauses: List[Clause], solution: List[Literal], value: bool, logger: L
     logger.split_calls += 1
     next_literal = 0
     if solver == 1:
-        next_literal = next(iter(clauses[0]))
+        next_literal = next(iter(clauses[0].keys()))
     elif solver == 2:
         pass
     elif solver == 3:
@@ -115,7 +115,7 @@ def unit_propagation(clauses: List[Clause], solution: List[Literal], logger: Log
             if len(clause) == 1:
                 simplified = False
                 status = NOT_DONE
-                clauses, trues = assign(clauses, solution, next(iter(clause)), logger=logger)
+                clauses, trues = assign(clauses, solution, next(iter(clause.keys())), logger=logger)
                 break
     return status, clauses, solution
 
