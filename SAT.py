@@ -214,7 +214,10 @@ def main():
     if not os.path.exists('log'):
         os.mkdir('log')
     log_file = '_'.join([os.path.basename(f) for f in args.filenames])
-    solve_files(args.filenames, solver=args.solver, verbose=args.verbose, log_file='log/' + log_file + '.log')
+    solution = solve_files(args.filenames, solver=args.solver, verbose=args.verbose,
+                           log_file='log/' + log_file + '.log')
+    if solution:
+        print(list(filter(value, solution)))
 
 
 if __name__ == "__main__":
