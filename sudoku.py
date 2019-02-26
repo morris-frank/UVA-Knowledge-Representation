@@ -73,13 +73,14 @@ def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, proces
                           log_file='log/' + os.path.basename(fname) + '.log')
     with open(fname) as f:
         sudokus = f.readlines()
-    _tqdm = tqdm if not verbose else lambda x, total: x
+    _tqdm = tqdm if not verbose else lambda x, total, desc: x
+    _desc = '{} ({})'.format(os.path.basename(fname), solver)
     if processes > 1:
         pool = Pool(processes=processes)
-        for _ in _tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus)):
+        for _ in _tqdm(pool.imap_unordered(_solve_line, sudokus), total=len(sudokus), desc=_desc):
             pass
     else:
-        for sudoku in _tqdm(sudokus, total=len(sudokus)):
+        for sudoku in _tqdm(sudokus, total=len(sudokus), desc=_desc):
             _solve_line(sudoku)
 
 
