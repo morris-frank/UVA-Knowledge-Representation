@@ -1,0 +1,263 @@
+diff --git a/solo.c b/solo.c
+index cfe38c5..26dd0c6 100644
+--- a/solo.c
++++ b/solo.c
+@@ -26,7 +26,7 @@
+  *       elimination-only might be in order
+  *     + but it's not good to have _too_ many difficulty levels, or
+  *       it'll take too long to randomly generate a given level.
+- * 
++ *
+  *  - it might still be nice to do some prioritisation on the
+  *    removal of numbers from the grid
+  *     + one possibility is to try to minimise the maximum number
+@@ -82,6 +82,7 @@
+  * possible: the above is a 2x3 puzzle, not a 3x2 one.
+  */
+ 
++
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -204,7 +205,7 @@ struct game_params {
+     /*
+      * For a square puzzle, `c' and `r' indicate the puzzle
+      * parameters as described above.
+-     * 
++     *
+      * A jigsaw-style puzzle is indicated by r==1, in which case c
+      * can be whatever it likes (there is no constraint on
+      * compositeness - a 7x7 jigsaw sudoku makes perfect sense).
+@@ -243,7 +244,7 @@ struct block_structure {
+      * are of the form "(1,3)"; for jigsaw they are "starting at
+      * (5,7)". So the sensible usage in both cases is to say
+      * "elimination within block %s" with one of these strings.
+-     * 
++     *
+      * Only blocknames itself needs individually freeing; it's all
+      * one block.
+      */
+@@ -639,13 +640,13 @@ static void remove_from_block(struct block_structure *blocks, int b, int n)
+ 
+ /* ----------------------------------------------------------------------
+  * Solver.
+- * 
++ *
+  * This solver is used for two purposes:
+  *  + to check solubility of a grid as we gradually remove numbers
+  *    from it
+  *  + to solve an externally generated puzzle when the user selects
+  *    `Solve'.
+- * 
++ *
+  * It supports a variety of specific modes of reasoning. By
+  * enabling or disabling subsets of these modes we can arrange a
+  * range of difficulty levels.
+@@ -695,9 +696,9 @@ static void remove_from_block(struct block_structure *blocks, int b, int n)
+  *       places, found by taking the _complement_ of the union of
+  *       the numbers' possible positions (or the spaces' possible
+  *       contents).
+- * 
++ *
+  *  - Forcing chains (see comment for solver_forcing().)
+- * 
++ *
+  *  - Recursion. If all else fails, we pick one of the currently
+  *    most constrained empty squares and take a random guess at its
+  *    contents, then continue solving on that basis and see if we
+@@ -1123,7 +1124,7 @@ static int solver_set(struct solver_usage *usage,
+                  * bits in the positions _not_ listed in `set'.
+                  * Return +1 (meaning progress has been made) if we
+                  * successfully eliminated anything at all.
+-                 * 
++                 *
+                  * This involves referring back through
+                  * rowidx/colidx in order to work out which actual
+                  * positions in the cube to meddle with.
+@@ -1246,7 +1247,7 @@ static int solver_forcing(struct solver_usage *usage,
+             /*
+              * If this square doesn't have exactly two candidate
+              * numbers, don't try it.
+-             * 
++             *
+              * In this loop we also sum the candidate numbers,
+              * which is a nasty hack to allow us to quickly find
+              * `the other one' (since we will shortly know there
+@@ -1763,7 +1764,7 @@ static void solver(int cr, struct block_structure *blocks,
+ 	usage->diag = snewn(cr * 2, bool);
+ 	memset(usage->diag, 0, cr * 2 * sizeof(bool));
+     } else
+-	usage->diag = NULL; 
++	usage->diag = NULL;
+ 
+     usage->nr_regions = cr * 3 + (xtype ? 2 : 0);
+     usage->regions = snewn(cr * usage->nr_regions, int);
+@@ -3188,7 +3189,7 @@ static char *encode_solve_move(int cr, digit *grid)
+      * It's surprisingly easy to work out _exactly_ how long this
+      * string needs to be. To decimal-encode all the numbers from 1
+      * to n:
+-     * 
++     *
+      *  - every number has a units digit; total is n.
+      *  - all numbers above 9 have a tens digit; total is max(n-9,0).
+      *  - all numbers above 99 have a hundreds digit; total is max(n-99,0).
+@@ -3269,7 +3270,7 @@ static char *encode_block_structure_desc(char *p, struct block_structure *blocks
+      * ordinary reading order, then over the cr*(cr-1)
+      * internal horizontal ones in transposed reading
+      * order.
+-     * 
++     *
+      * We encode the number of non-lines between the
+      * lines; _ means zero (two adjacent divisions), a
+      * means 1, ..., y means 25, and z means 25 non-lines
+@@ -3668,11 +3669,11 @@ static char *new_game_desc(const game_params *params, random_state *rs,
+ 
+     kblocks = NULL;
+     kgrid = (params->killer) ? snewn(area, digit) : NULL;
+-
++/*
+ #ifdef STANDALONE_SOLVER
+     assert(!"This should never happen, so we don't need to create blocknames");
+ #endif
+-
++*/
+     /*
+      * Loop until we get a grid of the required difficulty. This is
+      * nasty, but it seems to be unpleasantly hard to generate
+@@ -3705,22 +3706,6 @@ static char *new_game_desc(const game_params *params, random_state *rs,
+ 	    continue;
+         assert(check_valid(cr, blocks, kblocks, NULL, params->xtype, grid));
+ 
+-	/*
+-	 * Save the solved grid in aux.
+-	 */
+-	{
+-	    /*
+-	     * We might already have written *aux the last time we
+-	     * went round this loop, in which case we should free
+-	     * the old aux before overwriting it with the new one.
+-	     */
+-            if (*aux) {
+-		sfree(*aux);
+-            }
+-
+-            *aux = encode_solve_move(cr, grid);
+-	}
+-
+ 	/*
+ 	 * Now we have a solved grid. For normal puzzles, we start removing
+ 	 * things from it while preserving solubility.  Killer puzzles are
+@@ -4340,15 +4325,15 @@ static char *grid_text_format(int cr, struct block_structure *blocks,
+      * For jigsaw puzzles, however, we must leave space between
+      * _all_ pairs of digits for an optional dividing line, so we
+      * have to move to the rather ugly
+-     * 
++     *
+      * .   .   .   .
+      * ------+------
+      * .   . | .   .
+-     *       +---+  
++     *       +---+
+      * .   . | . | .
+-     * ------+   |  
++     * ------+   |
+      * .   .   . | .
+-     * 
++     *
+      * We deal with both cases using the same formatting code; we
+      * simply invent a vmod value such that there's a vertical
+      * dividing line before column i iff i is divisible by vmod
+@@ -5633,71 +5618,30 @@ const struct game thegame = {
+ 
+ int main(int argc, char **argv)
+ {
+-    game_params *p;
+-    game_state *s;
+-    char *id = NULL, *desc;
+-    const char *err;
+-    bool grade = false;
+-    struct difficulty dlev;
+-
+-    while (--argc > 0) {
+-        char *p = *++argv;
+-        if (!strcmp(p, "-v")) {
+-            solver_show_working = true;
+-        } else if (!strcmp(p, "-g")) {
+-            grade = true;
+-        } else if (*p == '-') {
+-            fprintf(stderr, "%s: unrecognised option `%s'\n", argv[0], p);
+-            return 1;
+-        } else {
+-            id = p;
+-        }
+-    }
+-
+-    if (!id) {
+-        fprintf(stderr, "usage: %s [-g | -v] <game_id>\n", argv[0]);
+-        return 1;
+-    }
+-
+-    desc = strchr(id, ':');
+-    if (!desc) {
+-        fprintf(stderr, "%s: game id expects a colon in it\n", argv[0]);
+-        return 1;
+-    }
+-    *desc++ = '\0';
++    game_params *p = snew(game_params);
++    p->c = p->r = 3;
++    p->xtype = false;
++    p->killer = false;
++    p->symm = SYMM_ROT2;	       /* a plausible default */
++    p->kdiff = DIFF_KMINMAX;      /* so is this */
++    p->diff = DIFF_RECURSIVE;
++    /*
++    p->diff = DIFF_BLOCK;
++    p->diff = DIFF_SIMPLE;
++    p->diff = DIFF_INTERSECT;
++    p->diff = DIFF_SET;
++    p->diff = DIFF_EXTREME;
++    */
+ 
+-    p = default_params();
+-    decode_params(p, id);
+-    err = validate_desc(p, desc);
+-    if (err) {
+-        fprintf(stderr, "%s: %s\n", argv[0], err);
+-        return 1;
+-    }
+-    s = new_game(NULL, p, desc);
++    random_state *rs = random_new("12345", 5);
++    char** aux = NULL;
++    bool interactive = false;
+ 
+-    dlev.maxdiff = DIFF_RECURSIVE;
+-    dlev.maxkdiff = DIFF_KINTERSECT;
+-    solver(s->cr, s->blocks, s->kblocks, s->xtype, s->grid, s->kgrid, &dlev);
+-    if (grade) {
+-	printf("Difficulty rating: %s\n",
+-	       dlev.diff==DIFF_BLOCK ? "Trivial (blockwise positional elimination only)":
+-	       dlev.diff==DIFF_SIMPLE ? "Basic (row/column/number elimination required)":
+-	       dlev.diff==DIFF_INTERSECT ? "Intermediate (intersectional analysis required)":
+-	       dlev.diff==DIFF_SET ? "Advanced (set elimination required)":
+-	       dlev.diff==DIFF_EXTREME ? "Extreme (complex non-recursive techniques required)":
+-	       dlev.diff==DIFF_RECURSIVE ? "Unreasonable (guesswork and backtracking required)":
+-	       dlev.diff==DIFF_AMBIGUOUS ? "Ambiguous (multiple solutions exist)":
+-	       dlev.diff==DIFF_IMPOSSIBLE ? "Impossible (no solution exists)":
+-	       "INTERNAL ERROR: unrecognised difficulty code");
+-	if (p->killer)
+-	    printf("Killer difficulty: %s\n",
+-		   dlev.kdiff==DIFF_KSINGLE ? "Trivial (single square cages only)":
+-		   dlev.kdiff==DIFF_KMINMAX ? "Simple (maximum sum analysis required)":
+-		   dlev.kdiff==DIFF_KSUMS ? "Intermediate (sum possibilities)":
+-		   dlev.kdiff==DIFF_KINTERSECT ? "Advanced (sum region intersections)":
+-		   "INTERNAL ERROR: unrecognised difficulty code");
+-    } else {
+-        printf("%s\n", grid_text_format(s->cr, s->blocks, s->xtype, s->grid));
++    int i;
++    for (i = 0; i < 500; i++)
++    {
++        char* desc = new_game_desc(p, rs, aux, interactive);
++        puts(desc);
+     }
+ 
+     return 0;
