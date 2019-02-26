@@ -2,7 +2,6 @@
 
 import os
 from typing import List
-from itertools import repeat
 from colorama import Back
 from argparse import ArgumentParser
 import tempfile
@@ -46,8 +45,8 @@ def sudoku2dimacs(line: str) -> List[str]:
     return literals
 
 
-def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_file='./sudoku-rules.txt',
-                      log_file='sudoku.py.log'):
+def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, cross: bool = False,
+                      rule_file='./sudoku-rules.txt', log_file='sudoku.py.log', cross_file='./cross-rules.txt'):
     fd, temp_file = tempfile.mkstemp(prefix='tmp-sudoku')
     literals = sudoku2dimacs(sudoku)
     with os.fdopen(fd, 'w') as fp:
@@ -56,8 +55,10 @@ def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_
 
         if verbose:
             print_sudoku(literals)
-
-    solution = solve_files([temp_file, rule_file], verbose=verbose, solver=solver, log_file=log_file)
+    rules_files = [temp_file, rule_file]
+    if cross:
+        rules_files.append(cross_file)
+    solution = solve_files(rules_files, verbose=verbose, solver=solver, log_file=log_file)
     if verbose:
         if solution:
             print_sudoku(solution)
@@ -65,10 +66,10 @@ def solve_sudoku_line(sudoku: str, verbose: bool = False, solver: int = 1, rule_
     os.remove(temp_file)
 
 
-def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, processes=1):
+def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, processes=1, cross=False):
     if not os.path.exists('log'):
         os.mkdir('log')
-    _solve_line = partial(solve_sudoku_line, verbose=verbose, solver=solver,
+    _solve_line = partial(solve_sudoku_line, verbose=verbose, solver=solver, cross=cross,
                           log_file='log/' + os.path.basename(fname) + '.log')
     with open(fname) as f:
         sudokus = f.readlines()
@@ -83,19 +84,21 @@ def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, proces
 
 
 def parse_args():
-    parser = ArgumentParser(description="Sudoku Solver.")
+    parser = ArgumentParser(description='Sudoku Solver.')
     parser.add_argument('-v', dest='verbose', action='store_true')
     parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
                         required=True)
     parser.add_argument('filename', help='The text file to parse from.', type=str)
     parser.add_argument('-p', dest='processes', help='Number of processes to start.', type=int, default=4)
+    parser.add_argument('-x', dest='cross', help='Play with the cross rules', action='store_true')
     args = parser.parse_args()
     return args
 
 
 def main():
     args = parse_args()
-    solve_sudoku_file(args.filename, verbose=args.verbose, solver=args.solver, processes=args.processes)
+    solve_sudoku_file(args.filename, verbose=args.verbose, solver=args.solver, processes=args.processes,
+                      cross=args.cross)
 
 
 if __name__ == '__main__':
