@@ -131,6 +131,13 @@ def split(clauses: Dict[int, Clause], stats: Stats, solver: int) -> Literal:
                 if  score > max_score:
                     next_literal = literal
                     max_score = score
+    elif solver == 4:
+        scores = {}
+        for clause in clauses.values():
+            for literal in clause:
+                if value_literal(literal):
+                    scores[literal] = scores.get(literal, 0) + 2**(-len(clause))
+        next_literal = max(scores, key=scores.get)
     return next_literal
 
 def unit_propagation(clauses: Dict[int, Clause], solution: List[Literal], stats: Stats)\
