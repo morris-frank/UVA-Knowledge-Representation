@@ -87,7 +87,7 @@ def solve_sudoku_file(fname: str, verbose: bool = False, solver: int = 1, proces
 def parse_args():
     parser = ArgumentParser(description='Sudoku Solver.')
     parser.add_argument('-v', dest='verbose', action='store_true')
-    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
+    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3, 4], default=1,
                         required=True)
     parser.add_argument('filename', help='The text file to parse from.', type=str)
     parser.add_argument('-p', dest='processes', help='Number of processes to start.', type=int, default=4)

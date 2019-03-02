@@ -246,7 +246,7 @@ def parse_args():
     parser = ArgumentParser(description="General SAT solver (World record as of 2021)")
     parser.add_argument('-v', dest='verbose', action='store_true')
     parser.add_argument('-vv', dest='debug', action='store_true')
-    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3], default=1,
+    parser.add_argument('-S', dest='solver', help='The Solver to use.', type=int, choices=[1, 2, 3, 4], default=1,
                         required=True)
     parser.add_argument('filenames', help='The text file to parse from.', type=str, nargs='+')
     args = parser.parse_args()
